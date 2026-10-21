@@ -1,0 +1,62 @@
+# Operations runbook (draft)
+
+Status: written against the M0–M5 code. Steps that depend on hardware behaviour (sleep, tracking, venue Wi-Fi) are marked **unverified** until qualification.
+
+## Build and install
+
+```sh
+./gradlew :shared-protocol:test :shared-domain:test :vr-headset:testDebugUnitTest   # JVM tests
+./gradlew :vr-controller:assembleDebug :vr-headset:assembleDebug
+adb -s <tablet> install -r vr-controller/build/outputs/apk/debug/vr-controller-debug.apk
+adb -s <quest>  install -r vr-headset/build/outputs/apk/debug/vr-headset-debug.apk
+```
+
+Toolchain: JDK 17+ to run Gradle (tested with the JDK 25 bundled in Android Studio), Gradle 9.2.1 wrapper, AGP 8.11.1, Kotlin 2.3.0, Meta Spatial SDK 0.14.0. Release signing keys are kept outside the repository; configure a `signingConfig` locally or in CI before building release APKs. Uninstalling the headset app deletes its managed video copies.
+
+## First-time setup
+
+1. Open **Experience Control** on the tablet. Keep it open during setup, transfers and runs (the screen stays awake). Background hosting is not supported.
+2. **Headsets → Pairing mode** on.
+3. On each Quest open **VR Experience Player**. The setup panel lists tablets found on the network; choose yours. A 6-digit code appears.
+4. On the tablet, approve the request only if the code matches. Rename headsets (e.g. "Headset 1"); the name appears inside the headset.
+5. If a headset finds nothing: Setup → *Enter address manually* with the address and port from the tablet's **Diagnostics** screen → *Test connection*. "Cannot reach" plus "discovery found nothing" usually means client isolation on the Wi-Fi; use an allowed local network or hotspot.
+
+## Content
+
+1. **Library → Import video** (system file picker). The file is copied into the tablet and checksummed; nothing streams later.
+2. Check **Layout** (projection / stereo / eye order) with a known sample — the import only *suggests* one and shows "Check layout" until confirmed. `test-fixtures/make-fixtures.sh` generates labelled left/right test clips.
+3. **Send to headsets**. Offline headsets are queued and receive the video on reconnect; transfers pause while a headset is in a run. The **Transfers** tab shows progress, verification and errors per headset.
+
+## Running a session
+
+1. **Run → Choose video**. All online headsets are selected; tap tiles to change the selection.
+2. **Prepare**. Participants freeze. Each headset loads the video silently behind its standby scene and syncs its clock. Tiles show *Ready* or the reason they are not.
+3. If one is not ready: wait, *Retry not ready*, or remove it from the run via its ⋮ menu. Nothing is removed silently.
+4. Press **START** when participants are ready. "Starting…" covers the ~2 s coordination delay; the video (including its own countdown) then plays from the beginning.
+5. Tiles distinguish *Start accepted* from *Playing* (observed) and show *Outcome unknown* when no acknowledgement arrived. Headsets out of contact keep playing; their progress is marked *estimated*.
+6. Pause / Resume / Stop reach only headsets in contact and report per-device results; nothing is queued for later. **Restart** stops reachable headsets and prepares a new generation from zero — press Start again.
+7. When results are in (headsets upload them on reconnect), **New run**.
+
+## Recovery
+
+| Situation | What happens / what to do |
+| --- | --- |
+| Headset leaves Wi-Fi during playback | Keeps playing to the end, returns to standby, uploads its result when back in range. No action. |
+| Headset missed the start | Stays in standby; it never joins late. Include it in the next run. |
+| Tablet app restarted mid-run | Headsets are unaffected. The tablet shows the previous run with a banner; results reconcile as headsets report. Close it before a new run. |
+| Headset app restarted / slept before Start | Readiness is lost (tile shows the reason). Wake it, then *Retry not ready*. **Unverified** on hardware. |
+| Headset removed or slept during playback | Pauses and records an interruption; resume explicitly or restart. **Unverified** on hardware. |
+| "Pairing revoked" in headset | Pair again (Pairing mode on the tablet). |
+
+## Diagnostics
+
+**Diagnostics → Export diagnostics** writes JSON (devices without credentials, current and past runs, transfers, event log). Headset start timings are logged under the `HeadsetSession` tag (`adb logcat -s HeadsetSession`).
+
+## Developing without headsets
+
+```sh
+adb forward tcp:47800 tcp:47800          # if the tablet app runs in an emulator
+./gradlew :tools:headset-simulator:run --args="--host 127.0.0.1 --port 47800 --count 4 --offline 3"
+```
+
+Simulated headsets run the real session reducer and protocol, download videos over HTTP and verify them, and can simulate leaving coverage (`--offline N`). They are not evidence of start alignment.

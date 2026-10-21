@@ -1,0 +1,18 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+# Signing material and production media stay out of source control.
+*.jks
+*.keystore
+keystore.properties
+*.mp4
+*.mkv
+*.mov
+.kotlin/
+.claude/

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M0: the controller link is plaintext HTTP/WebSocket on the local network, authenticated with a
+     per-headset bearer credential. TLS with a pinned controller identity is an open decision gate
+     (see docs/protocol-v1.md, "Transport security"). Remove cleartext once TLS lands. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
