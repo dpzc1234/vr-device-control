@@ -2,6 +2,7 @@ package com.vrdevicecontrol.controller.catalog
 
 import android.content.ContentResolver
 import android.graphics.Bitmap
+import android.media.MediaCodecList
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
@@ -133,7 +134,7 @@ class CatalogRepository(
                     bitrate = probe.bitrate,
                     frameRate = probe.frameRate,
                 )
-                val thumb = writeThumbnail(final, assetId, probe.durationUs)
+                val thumb = writeThumbnail(final, assetId, probe)
                 val entry = CatalogEntry(
                     asset = asset,
                     presentation = suggestPresentation(assetId, name, probe.width, probe.height),
@@ -229,7 +230,7 @@ class CatalogRepository(
             bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
             val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             if (rotation == 90 || rotation == 270) { val t = width; width = height; height = t }
-        } catch (_: Exception) {
+        } catch (_: Throwable) { // Includes OutOfMemoryError from huge frames.
         } finally {
             runCatching { retriever.release() }
         }
@@ -254,14 +255,19 @@ class CatalogRepository(
                     audioMime = mime
                 }
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) { // Includes OutOfMemoryError from huge frames.
         } finally {
             extractor.release()
         }
         return Probe(container, durationUs, width, height, videoMime, audioMime, bitrate, frameRate)
     }
 
-    private fun writeThumbnail(file: File, assetId: String, durationUs: Long): Boolean {
+    private fun writeThumbnail(file: File, assetId: String, probe: Probe): Boolean {
+        // Without a hardware decoder for this codec and size (e.g. 8K AV1 on a Snapdragon 680), Android
+        // would decode a full frame in software: slow and memory-hungry. Show a placeholder instead.
+        val aboveUhd = probe.width.toLong() * probe.height > 3840L * 2160
+        if (aboveUhd && !hasHardwareDecoder(probe.videoMime, probe.width, probe.height)) return false
+        val durationUs = probe.durationUs
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(file.absolutePath)
@@ -270,12 +276,22 @@ class CatalogRepository(
             FileOutputStream(File(thumbDir, "$assetId.jpg")).use { frame.compress(Bitmap.CompressFormat.JPEG, 82, it) }
             frame.recycle()
             true
-        } catch (_: Exception) {
+        } catch (_: Throwable) { // Includes OutOfMemoryError from huge frames.
             false // Large 8K streams may not decode on the tablet; the UI shows a placeholder.
         } finally {
             runCatching { retriever.release() }
         }
     }
+
+    private fun hasHardwareDecoder(mime: String?, width: Int, height: Int): Boolean = runCatching {
+        if (mime == null) return false
+        MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+            !info.isEncoder && info.isHardwareAccelerated && info.supportedTypes.any { it.equals(mime, ignoreCase = true) } &&
+                (width <= 0 || height <= 0 || runCatching {
+                    info.getCapabilitiesForType(mime).videoCapabilities?.isSizeSupported(width, height) == true
+                }.getOrDefault(false))
+        }
+    }.getOrDefault(false)
 
     companion object {
         private val SHA = Regex("[0-9a-f]{64}")

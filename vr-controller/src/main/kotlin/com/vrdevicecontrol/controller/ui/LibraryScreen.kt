@@ -1,5 +1,6 @@
 package com.vrdevicecontrol.controller.ui
 
+import android.content.ActivityNotFoundException
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -77,7 +78,20 @@ import com.vrdevicecontrol.protocol.TransferState
 
 @Composable
 fun LibraryScreen(state: UiState, vm: ControllerViewModel) {
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::import) }
+    val openDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::import) }
+    // Fallback for tablets whose system file picker is missing or disabled (some vendor/kiosk builds).
+    val getContent = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let(vm::import) }
+    val launchPicker = {
+        try {
+            openDocument.launch(arrayOf("video/*"))
+        } catch (e: ActivityNotFoundException) {
+            try {
+                getContent.launch("video/*")
+            } catch (e2: ActivityNotFoundException) {
+                vm.notify("This tablet has no file picker app. Install a file manager, then try again.")
+            }
+        }
+    }
     var layoutFor by remember { mutableStateOf<CatalogEntry?>(null) }
     var distributeFor by remember { mutableStateOf<CatalogEntry?>(null) }
     var deleteFor by remember { mutableStateOf<CatalogEntry?>(null) }
@@ -86,7 +100,7 @@ fun LibraryScreen(state: UiState, vm: ControllerViewModel) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp)) {
         ScreenHeader("Library", "${state.library.size} video${if (state.library.size == 1) "" else "s"} on this tablet") {
-            Button(onClick = { picker.launch(arrayOf("video/*")) }, enabled = importing == null, modifier = Modifier.height(48.dp)) {
+            Button(onClick = launchPicker, enabled = importing == null, modifier = Modifier.height(48.dp)) {
                 Icon(Icons.Rounded.Add, null); Spacer(Modifier.width(8.dp)); Text("Import video")
             }
         }
@@ -112,7 +126,7 @@ fun LibraryScreen(state: UiState, vm: ControllerViewModel) {
             EmptyState(
                 Icons.Rounded.VideoLibrary, "Import your first video",
                 "Videos are copied into the tablet, then sent to each headset before a session. Playback never streams.",
-            ) { Button(onClick = { picker.launch(arrayOf("video/*")) }) { Text("Import video") } }
+            ) { Button(onClick = launchPicker) { Text("Import video") } }
             return@Column
         }
 

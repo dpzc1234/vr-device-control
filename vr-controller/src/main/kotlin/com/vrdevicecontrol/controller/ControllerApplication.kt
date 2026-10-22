@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import com.vrdevicecontrol.controller.catalog.CatalogRepository
 import com.vrdevicecontrol.controller.devices.DeviceRegistry
+import com.vrdevicecontrol.controller.diagnostics.CrashRecorder
 import com.vrdevicecontrol.controller.diagnostics.EventLog
 import com.vrdevicecontrol.controller.diagnostics.LogEvent
 import com.vrdevicecontrol.controller.host.ControllerHost
@@ -44,6 +45,7 @@ class ControllerApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashRecorder.install(this)
         graph = ControllerGraph(this).also { it.start() }
     }
 }
@@ -60,6 +62,7 @@ private data class DiagnosticsExport(
     val runHistory: List<Run>,
     val transfers: List<TransferJob>,
     val events: List<LogEvent>,
+    val lastCrash: String?,
 )
 
 /**
@@ -158,6 +161,7 @@ class ControllerGraph(app: Application) {
             runHistory = runs.history.value,
             transfers = transfers.jobs.value,
             events = log.events.value,
+            lastCrash = CrashRecorder.read(),
         )
         val pretty = Json(json) { prettyPrint = true }
         out.write(pretty.encodeToString(DiagnosticsExport.serializer(), export).toByteArray())

@@ -23,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +55,17 @@ fun DiagnosticsScreen(state: UiState, vm: ControllerViewModel) {
         }
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                state.lastCrash?.let { crash ->
+                    Panel(Modifier.fillMaxWidth(), highlight = Tone.BAD) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("The app closed unexpectedly last time", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = vm::clearCrash) { Text("Clear") }
+                        }
+                        Text("Use Export diagnostics to send this to the developers.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(10.dp))
+                        Text(crash.lines().take(18).joinToString("\n"), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 Panel(Modifier.fillMaxWidth()) {
                     Text("This tablet", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))

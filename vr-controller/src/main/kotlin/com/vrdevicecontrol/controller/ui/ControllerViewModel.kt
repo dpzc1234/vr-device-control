@@ -8,6 +8,7 @@ import com.vrdevicecontrol.controller.ControllerApplication
 import com.vrdevicecontrol.controller.catalog.CatalogEntry
 import com.vrdevicecontrol.controller.catalog.ImportProgress
 import com.vrdevicecontrol.controller.devices.DeviceView
+import com.vrdevicecontrol.controller.diagnostics.CrashRecorder
 import com.vrdevicecontrol.controller.devices.PendingPairing
 import com.vrdevicecontrol.controller.diagnostics.LogEvent
 import com.vrdevicecontrol.controller.host.HostState
@@ -65,6 +66,8 @@ data class UiState(
     val run: RunUi? = null,
     val history: List<Run> = emptyList(),
     val events: List<LogEvent> = emptyList(),
+    /** Stack trace of the last crash, kept until the operator clears it. */
+    val lastCrash: String? = null,
     val loaded: Boolean = false,
 ) {
     fun device(id: String) = devices.firstOrNull { it.deviceId == id }
@@ -108,7 +111,8 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             while (isActive) {
                 val addresses = withContext(kotlinx.coroutines.Dispatchers.IO) { localAddresses() }
-                _ui.value = _ui.value.copy(addresses = addresses)
+                val crash = withContext(kotlinx.coroutines.Dispatchers.IO) { CrashRecorder.read() }
+                _ui.value = _ui.value.copy(addresses = addresses, lastCrash = crash)
                 delay(10_000)
             }
         }
@@ -231,6 +235,15 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
     fun revoke(deviceId: String) = act("Headset forgotten — it must pair again") { registry.revoke(deviceId) }
 
     fun thumbnail(assetId: String): File? = graph.catalog.thumbnail(assetId)
+
+    fun clearCrash() {
+        CrashRecorder.clear()
+        _ui.value = _ui.value.copy(lastCrash = null)
+    }
+
+    fun notify(message: String) {
+        _messages.trySend(message)
+    }
 
     fun exportDiagnostics(uri: Uri) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {

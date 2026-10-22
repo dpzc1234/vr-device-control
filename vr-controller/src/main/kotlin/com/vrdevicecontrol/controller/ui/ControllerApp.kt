@@ -109,6 +109,7 @@ private fun Rail(state: UiState, selected: Tab, onSelect: (Tab) -> Unit) {
             val badge: String? = when (t) {
                 Tab.HEADSETS -> pendingPairings.takeIf { it > 0 }?.toString()
                 Tab.TRANSFERS -> (if (failedTransfers > 0) "!" else activeTransfers.takeIf { it > 0 }?.toString())
+                Tab.DIAGNOSTICS -> if (state.lastCrash != null) "!" else null
                 else -> null
             }
             NavigationRailItem(

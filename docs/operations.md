@@ -13,6 +13,16 @@ adb -s <quest>  install -r vr-headset/build/outputs/apk/debug/vr-headset-debug.a
 
 Toolchain: JDK 17+ to run Gradle (tested with the JDK 25 bundled in Android Studio), Gradle 9.2.1 wrapper, AGP 8.11.1, Kotlin 2.3.0, Meta Spatial SDK 0.14.0. Release signing keys are kept outside the repository; configure a `signingConfig` locally or in CI before building release APKs. Uninstalling the headset app deletes its managed video copies.
 
+## Tablet power settings (Honor / MagicOS and similar)
+
+Some vendor builds (Honor MagicOS, Huawei EMUI, Xiaomi, Oppo and others) close apps aggressively in the background. The tablet's server runs inside the app, and the app is briefly in the background whenever the system file picker is open during an import. Once per tablet:
+
+- **MagicOS:** Settings → Apps → Experience Control → *App launch* → switch off *Manage automatically*, then enable *Auto-launch*, *Secondary launch* and *Run in background*.
+- Settings → Battery → (More settings / App battery usage) → set Experience Control to *Unrestricted* or *Don't optimise*.
+- Optionally lock the app in Recents (swipe down on its card) so "clear all" does not close it.
+
+Exact menu names vary by OS version. If headsets drop offline every time the tablet screen turns off or another app opens, revisit these settings first.
+
 ## First-time setup
 
 1. Open **Experience Control** on the tablet. Keep it open during setup, transfers and runs (the screen stays awake). Background hosting is not supported.
