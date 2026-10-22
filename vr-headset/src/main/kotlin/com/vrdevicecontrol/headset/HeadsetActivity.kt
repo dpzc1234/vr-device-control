@@ -32,7 +32,8 @@ class HeadsetActivity : AppSystemActivity() {
             composeViewCreator = { _, ctx -> ComposeView(ctx).apply { setContent { HeadsetPanel(graph) } } },
             settingsCreator = {
                 UIPanelSettings(
-                    shape = QuadShapeOptions(width = 1.6f, height = 1.0f),
+                    // Same 960x600 dp layout, physically smaller: about 1 m wide at 1.6 m away.
+                    shape = QuadShapeOptions(width = 0.96f, height = 0.6f),
                     style = PanelStyleOptions(themeResourceId = R.style.PanelTheme),
                     display = DpDisplayOptions(width = 960f, height = 600f),
                 )

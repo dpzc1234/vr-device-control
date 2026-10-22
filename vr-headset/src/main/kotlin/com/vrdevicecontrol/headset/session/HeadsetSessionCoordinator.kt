@@ -308,8 +308,14 @@ class HeadsetSessionCoordinator(
                 scene?.showVideo()
                 engine?.play()
             }
-            SessionEffect.PausePlayer -> engine?.pause()
-            SessionEffect.ResumePlayer -> engine?.resume()
+            SessionEffect.PausePlayer -> {
+                engine?.pause()
+                scene?.showStandby() // Paused wearers see their surroundings, not a frozen frame.
+            }
+            SessionEffect.ResumePlayer -> {
+                scene?.showVideo()
+                engine?.resume()
+            }
             SessionEffect.ShowStandby -> scene?.showStandby()
             is SessionEffect.SendReady -> run?.let {
                 reply(MessageType.READY, codec.toPayload(Ready(effect.token, it.asset.sha256, it.presentation.revision, effect.clockEstimateId, clock.nowUs())), null, it.runId, it.generation)

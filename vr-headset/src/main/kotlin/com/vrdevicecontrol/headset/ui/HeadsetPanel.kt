@@ -81,7 +81,13 @@ fun HeadsetPanel(graph: HeadsetGraph) {
             Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(36.dp))
-                .background(Brush.verticalGradient(listOf(Night, Deep, Teal.copy(alpha = 0.85f)))),
+                // See-through over passthrough in standby; nearly opaque for the denser setup screen.
+                .background(
+                    Brush.verticalGradient(
+                        if (showSetup) listOf(Night.copy(alpha = 0.94f), Deep.copy(alpha = 0.94f), Teal.copy(alpha = 0.85f))
+                        else listOf(Night.copy(alpha = 0.55f), Deep.copy(alpha = 0.5f), Teal.copy(alpha = 0.45f)),
+                    ),
+                ),
         ) {
             AnimatedContent(targetState = showSetup, label = "mode") { setup ->
                 if (setup) {
@@ -113,9 +119,16 @@ private fun StandbyScreen(graph: HeadsetGraph, link: LinkState, playback: Playba
             Box(Modifier.size(64.dp).clip(CircleShape).background(Accent.copy(alpha = 0.8f)))
         }
         Spacer(Modifier.height(40.dp))
-        Text("Relax and get comfortable", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Light, textAlign = TextAlign.Center)
+        val paused = playback == PlaybackState.PAUSED
+        Text(
+            if (paused) "Paused" else "Relax and get comfortable",
+            color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Light, textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(12.dp))
-        Text("Your experience will begin shortly.", color = Mist, fontSize = 24.sp, textAlign = TextAlign.Center)
+        Text(
+            if (paused) "Please wait. The experience will continue shortly." else "Your experience will begin shortly.",
+            color = Mist, fontSize = 24.sp, textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.weight(1f))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             StatusDot(linkColor(link))
