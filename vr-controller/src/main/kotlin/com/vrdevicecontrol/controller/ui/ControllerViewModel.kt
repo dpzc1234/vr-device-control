@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.vrdevicecontrol.controller.ControllerApplication
+import com.vrdevicecontrol.controller.access.AccessState
+import com.vrdevicecontrol.controller.access.UnlockResult
 import com.vrdevicecontrol.controller.catalog.CatalogEntry
 import com.vrdevicecontrol.controller.catalog.ImportProgress
 import com.vrdevicecontrol.controller.devices.DeviceView
@@ -68,8 +70,11 @@ data class UiState(
     val events: List<LogEvent> = emptyList(),
     /** Stack trace of the last crash, kept until the operator clears it. */
     val lastCrash: String? = null,
+    val access: AccessState = AccessState(developer = false, pinSet = true),
     val loaded: Boolean = false,
 ) {
+    val developer get() = access.developer
+
     fun device(id: String) = devices.firstOrNull { it.deviceId == id }
     fun entry(assetId: String) = library.firstOrNull { it.asset.assetId == assetId }
     val onlineCount get() = devices.count { it.online }
@@ -102,6 +107,7 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
                 graph.transfers.jobs.map { },
                 graph.runs.current.map { },
                 graph.host.state.map { },
+                graph.access.state.map { },
             ).conflate().collect {
                 // Read actor-confined state on the actor for a consistent snapshot.
                 _ui.value = withContext(graph.actor) { snapshot() }
@@ -149,6 +155,7 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
             },
             history = runs.history.value,
             events = graph.log.events.value.takeLast(200).reversed(),
+            access = graph.access.state.value,
             loaded = true,
         )
     }
@@ -185,19 +192,34 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- Content -------------------------------------------------------------------------------
 
+    /** Defence in depth: library editing is refused in customer mode even if a control is reached. */
+    private fun requireDeveloper(): Boolean {
+        if (graph.access.isDeveloper) return true
+        _messages.trySend("Library editing is not available on this tablet")
+        return false
+    }
+
     fun import(uri: Uri) {
+        if (!requireDeveloper()) return
         viewModelScope.launch {
             val result = graph.catalog.import(uri)
             _messages.trySend(result.fold({ "Imported “${it.asset.title}” — check its layout" }, { "Import failed: ${it.message}" }))
         }
     }
 
-    fun updateLayout(assetId: String, projection: Projection, stereo: StereoLayout, eyeOrder: EyeOrder, flatWidth: Float) =
-        act("Layout saved") { catalog.updatePresentation(assetId, projection, stereo, eyeOrder, flatWidth) }
+    fun updateLayout(assetId: String, projection: Projection, stereo: StereoLayout, eyeOrder: EyeOrder, flatWidth: Float) {
+        if (requireDeveloper()) act("Layout saved") { catalog.updatePresentation(assetId, projection, stereo, eyeOrder, flatWidth) }
+    }
 
-    fun renameVideo(assetId: String, title: String) = act { catalog.rename(assetId, title) }
+    fun renameVideo(assetId: String, title: String) {
+        if (requireDeveloper()) act { catalog.rename(assetId, title) }
+    }
 
     fun deleteVideo(assetId: String, alsoFromHeadsets: Boolean) = graph.act {
+        if (!access.isDeveloper) {
+            _messages.trySend("Library editing is not available on this tablet")
+            return@act
+        }
         val inRun = runs.current.value?.let { it.asset.assetId == assetId && it.frozen } == true
         if (inRun) {
             _messages.trySend("This video is used by the current run")
@@ -235,6 +257,35 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
     fun revoke(deviceId: String) = act("Headset forgotten — it must pair again") { registry.revoke(deviceId) }
 
     fun thumbnail(assetId: String): File? = graph.catalog.thumbnail(assetId)
+
+    // --- Developer access ----------------------------------------------------------------------
+    // PBKDF2 is deliberately slow, so hashing runs off the main thread.
+
+    fun unlock(pin: String, onResult: (UnlockResult) -> Unit) {
+        viewModelScope.launch {
+            onResult(withContext(kotlinx.coroutines.Dispatchers.Default) { graph.access.unlock(pin) })
+        }
+    }
+
+    /** Sets or changes the PIN; returns the new recovery code to show once. */
+    fun setPin(pin: String, onRecoveryCode: (String) -> Unit) {
+        viewModelScope.launch {
+            val code = withContext(kotlinx.coroutines.Dispatchers.Default) { runCatching { graph.access.setPin(pin) } }
+            code.onSuccess(onRecoveryCode).onFailure { _messages.trySend(it.message ?: "Could not set the PIN") }
+        }
+    }
+
+    fun recover(recoveryCode: String, newPin: String, onResult: (UnlockResult, String?) -> Unit) {
+        viewModelScope.launch {
+            val (result, code) = withContext(kotlinx.coroutines.Dispatchers.Default) { graph.access.recover(recoveryCode, newPin) }
+            onResult(result, code)
+        }
+    }
+
+    fun lockDeveloperMode() {
+        graph.access.lock()
+        _messages.trySend("Developer mode locked")
+    }
 
     fun clearCrash() {
         CrashRecorder.clear()

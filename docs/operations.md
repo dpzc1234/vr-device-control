@@ -13,6 +13,15 @@ adb -s <quest>  install -r vr-headset/build/outputs/apk/debug/vr-headset-debug.a
 
 Toolchain: JDK 17+ to run Gradle (tested with the JDK 25 bundled in Android Studio), Gradle 9.2.1 wrapper, AGP 8.11.1, Kotlin 2.3.0, Meta Spatial SDK 0.14.0. Release signing keys are kept outside the repository; configure a `signingConfig` locally or in CI before building release APKs. Uninstalling the headset app deletes its managed video copies.
 
+## Developer mode and customer handover
+
+Customer mode hides library editing (import, delete, rename, layout) so customers cannot add their own content. Running sessions, pairing, and sending or removing library videos on headsets stay available.
+
+- **Fresh install:** the app opens in developer mode with an amber banner. Import and check the videos, then tap **Set PIN** (6–8 digits). Write down the **recovery code** shown once; it is not stored on the tablet in readable form. The tablet then locks after 15 minutes idle, on every app restart, or via **Lock** in the developer bar.
+- **Unlocking on site:** Diagnostics → tap the **Tablet app** version 7 times quickly → enter the PIN. Five wrong attempts lock the prompt for 30 s, doubling after each further failure.
+- **Forgotten PIN:** in the PIN prompt choose *Forgot PIN?*, enter the recovery code and a new PIN. A new recovery code replaces the old one.
+- **Known limit:** this is a UI lock. Clearing the app's data in Android settings returns it to a fresh install (developer mode, no PIN), though that also removes the library and all pairings.
+
 ## Tablet power settings (Honor / MagicOS and similar)
 
 Some vendor builds (Honor MagicOS, Huawei EMUI, Xiaomi, Oppo and others) close apps aggressively in the background. The tablet's server runs inside the app, and the app is briefly in the background whenever the system file picker is open during an import. Once per tablet:

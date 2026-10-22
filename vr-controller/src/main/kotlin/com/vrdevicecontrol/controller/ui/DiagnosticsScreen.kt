@@ -2,6 +2,8 @@ package com.vrdevicecontrol.controller.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -43,7 +46,20 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun DiagnosticsScreen(state: UiState, vm: ControllerViewModel) {
+fun DiagnosticsScreen(state: UiState, vm: ControllerViewModel, onUnlockGesture: () -> Unit) {
+    // Hidden gesture: 7 taps on the app version within 4 s opens the developer PIN prompt.
+    // No ripple and no countdown feedback, so nothing hints at it in customer mode.
+    val taps = remember { mutableListOf<Long>() }
+    val versionTap = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+        if (state.developer) return@clickable
+        val now = System.currentTimeMillis()
+        taps.removeAll { now - it > 4_000 }
+        taps += now
+        if (taps.size >= 7) {
+            taps.clear()
+            onUnlockGesture()
+        }
+    }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let(vm::exportDiagnostics) }
     val host = state.host
 
@@ -103,7 +119,7 @@ fun DiagnosticsScreen(state: UiState, vm: ControllerViewModel) {
                     Text("Versions", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
-                        LabeledValue("Tablet app", state.appVersion, Modifier.weight(1f))
+                        LabeledValue("Tablet app", state.appVersion, Modifier.weight(1f).then(versionTap))
                         LabeledValue("Protocol", "$PROTOCOL_MAJOR.$PROTOCOL_MINOR", Modifier.weight(1f))
                         LabeledValue("Transport", "HTTP/WS + device credential", Modifier.weight(1.4f), tone = Tone.WARN)
                     }

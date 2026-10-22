@@ -100,7 +100,7 @@ fun LibraryScreen(state: UiState, vm: ControllerViewModel) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp)) {
         ScreenHeader("Library", "${state.library.size} video${if (state.library.size == 1) "" else "s"} on this tablet") {
-            Button(onClick = launchPicker, enabled = importing == null, modifier = Modifier.height(48.dp)) {
+            if (state.developer) Button(onClick = launchPicker, enabled = importing == null, modifier = Modifier.height(48.dp)) {
                 Icon(Icons.Rounded.Add, null); Spacer(Modifier.width(8.dp)); Text("Import video")
             }
         }
@@ -120,6 +120,14 @@ fun LibraryScreen(state: UiState, vm: ControllerViewModel) {
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+
+        if (state.library.isEmpty() && importing == null && !state.developer) {
+            EmptyState(
+                Icons.Rounded.VideoLibrary, "No videos installed",
+                "Contact your content provider to have experience videos added to this tablet.",
+            )
+            return@Column
         }
 
         if (state.library.isEmpty() && importing == null) {
@@ -201,20 +209,25 @@ private fun VideoCard(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+            val onHeadsets = state.devices.filter { a.sha256 in it.inventory }
+            if (state.developer || onHeadsets.isNotEmpty()) {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+            }
             DropdownMenu(menu, { menu = false }) {
-                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-                state.devices.filter { a.sha256 in it.inventory }.forEach { d ->
+                if (state.developer) DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
+                onHeadsets.forEach { d ->
                     DropdownMenuItem(text = { Text("Remove from ${d.label}") }, enabled = d.online, onClick = { menu = false; vm.removeFromHeadset(a.assetId, d.deviceId) })
                 }
-                DropdownMenuItem(text = { Text("Delete from tablet", color = toneColor(Tone.BAD)) }, onClick = { menu = false; onDelete() })
+                if (state.developer) {
+                    DropdownMenuItem(text = { Text("Delete from tablet", color = toneColor(Tone.BAD)) }, onClick = { menu = false; onDelete() })
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Chip(projectionLabel(e.presentation.projection))
             Chip(stereoLabel(e.presentation.stereo))
-            if (!e.presentationConfirmed) Chip("Check layout", tone = Tone.WARN)
+            if (!e.presentationConfirmed && state.developer) Chip("Check layout", tone = Tone.WARN)
         }
         Spacer(Modifier.height(14.dp))
         // Per-headset availability at a glance.
@@ -241,7 +254,7 @@ private fun VideoCard(
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FilledTonalButton(onClick = onDistribute) { Icon(Icons.AutoMirrored.Rounded.Send, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Send to headsets") }
-            OutlinedButton(onClick = onLayout) { Icon(Icons.Rounded.Tune, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Layout") }
+            if (state.developer) OutlinedButton(onClick = onLayout) { Icon(Icons.Rounded.Tune, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Layout") }
         }
     }
 }

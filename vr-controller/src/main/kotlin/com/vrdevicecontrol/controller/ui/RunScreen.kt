@@ -126,7 +126,9 @@ fun RunScreen(state: UiState, vm: ControllerViewModel, onOpenLibrary: () -> Unit
 
         if (runUi == null) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (state.library.isEmpty()) {
+                if (state.library.isEmpty() && !state.developer) {
+                    EmptyState(Icons.Rounded.VideoLibrary, "No videos installed", "Contact your content provider to have experience videos added to this tablet.")
+                } else if (state.library.isEmpty()) {
                     EmptyState(Icons.Rounded.VideoLibrary, "No videos yet", "Import the experience video into the library, send it to the headsets, then come back here.") {
                         Button(onClick = onOpenLibrary) { Text("Open library") }
                     }
@@ -230,7 +232,7 @@ private fun VideoColumn(state: UiState, runUi: RunUi, vm: ControllerViewModel, o
             "${asset.width}×${asset.height} · ${codecLabel(asset.videoCodec)}${asset.frameRate?.let { " · ${it.toInt()} fps" } ?: ""} · ${formatBytes(asset.sizeBytes)}",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (runUi.entry?.presentationConfirmed == false) {
+        if (runUi.entry?.presentationConfirmed == false && state.developer) {
             Spacer(Modifier.height(10.dp))
             Chip("Layout not checked yet", tone = Tone.WARN)
         }

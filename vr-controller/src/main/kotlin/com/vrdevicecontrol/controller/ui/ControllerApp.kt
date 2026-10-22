@@ -4,6 +4,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -63,13 +64,21 @@ fun ControllerApp(vm: ControllerViewModel) {
     val state by vm.ui.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.RUN) }
     val snackbar = remember { SnackbarHostState() }
+    var accessDialog by remember { mutableStateOf<AccessDialog?>(null) }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Row(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(padding)) {
+        DeveloperBar(
+            state.access,
+            onSetPin = { accessDialog = AccessDialog.SetPin(changing = false) },
+            onChangePin = { accessDialog = AccessDialog.SetPin(changing = true) },
+            onLock = vm::lockDeveloperMode,
+        )
+        Row(Modifier.fillMaxSize()) {
             Rail(state, tab, onSelect = { tab = it })
             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -79,12 +88,14 @@ fun ControllerApp(vm: ControllerViewModel) {
                         Tab.HEADSETS -> HeadsetsScreen(state, vm)
                         Tab.LIBRARY -> LibraryScreen(state, vm)
                         Tab.TRANSFERS -> TransfersScreen(state, vm)
-                        Tab.DIAGNOSTICS -> DiagnosticsScreen(state, vm)
+                        Tab.DIAGNOSTICS -> DiagnosticsScreen(state, vm, onUnlockGesture = { accessDialog = AccessDialog.Unlock })
                     }
                 }
             }
         }
+        }
     }
+    AccessDialogs(accessDialog, vm) { accessDialog = it }
 }
 
 @Composable

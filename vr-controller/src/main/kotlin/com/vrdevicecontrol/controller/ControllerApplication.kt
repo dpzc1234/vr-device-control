@@ -3,6 +3,8 @@ package com.vrdevicecontrol.controller
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import com.vrdevicecontrol.controller.access.DeveloperAccess
+import com.vrdevicecontrol.controller.access.PrefsAccessStore
 import com.vrdevicecontrol.controller.catalog.CatalogRepository
 import com.vrdevicecontrol.controller.devices.DeviceRegistry
 import com.vrdevicecontrol.controller.diagnostics.CrashRecorder
@@ -77,6 +79,9 @@ class ControllerGraph(app: Application) {
     private val codec = ProtocolCodec.forController()
     val log = EventLog(clock)
 
+    /** Customer mode hides library editing; developer mode is PIN-protected. */
+    val access = DeveloperAccess(PrefsAccessStore(app))
+
     private val prefs = app.getSharedPreferences("controller", Context.MODE_PRIVATE)
     val controllerId: String = prefs.getString("controllerId", null) ?: UUID.randomUUID().toString().also {
         prefs.edit().putString("controllerId", it).apply()
@@ -114,6 +119,7 @@ class ControllerGraph(app: Application) {
                 delay(500)
                 runs.tick()
                 registry.tick()
+                access.tick()
             }
         }
         log.log("CONTROLLER_STARTED", detail = "epoch ${controllerEpoch.take(8)}")
