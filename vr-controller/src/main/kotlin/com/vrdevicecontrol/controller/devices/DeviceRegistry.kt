@@ -63,6 +63,8 @@ data class DeviceRecord(
     val lastStatus: HeadsetStatus? = null,
     val lastStatusAtUtc: String? = null,
     val inventory: List<InventoryItem> = emptyList(),
+    /** Address the headset last connected from; changes freely with DHCP and is display-only. */
+    val lastAddress: String? = null,
 )
 
 @Serializable
@@ -71,6 +73,7 @@ private data class RegistryData(val devices: List<DeviceRecord> = emptyList())
 data class LiveDevice(
     val link: DeviceLink,
     val connectedAtUs: Long,
+    val remoteAddress: String? = null,
     val status: HeadsetStatus? = null,
     val clock: ClockStatus? = null,
     val clockReceivedAtUs: Long = 0,
@@ -101,6 +104,8 @@ data class DeviceView(
     val clockAgeMs: Long?,
     val clockAcceptable: Boolean,
     val inventory: Set<String>,
+    /** Current address while online, otherwise the last one seen. */
+    val address: String? = null,
 ) {
     val deviceId get() = record.deviceId
     val label get() = record.label
@@ -250,9 +255,12 @@ class DeviceRegistry(
 
     // --- Connection lifecycle --------------------------------------------------------------------
 
-    fun onConnected(link: DeviceLink, hello: Hello) {
-        _live.value[link.deviceId]?.takeIf { it.link.connectionId != link.connectionId }?.link?.close("Replaced by a newer connection")
-        _live.update { it + (link.deviceId to LiveDevice(link, clock.nowUs())) }
+    fun onConnected(link: DeviceLink, hello: Hello, remoteAddress: String? = null) {
+        // A headset that reconnects (e.g. from a new IP after a restart) replaces its old connection
+        // immediately, instead of waiting for the old socket's heartbeat to expire.
+        val previous = _live.value[link.deviceId]?.takeIf { it.link.connectionId != link.connectionId }
+        previous?.link?.close("Replaced by a newer connection")
+        _live.update { it + (link.deviceId to LiveDevice(link, clock.nowUs(), remoteAddress)) }
         updateRecord(link.deviceId) {
             it.copy(
                 reportedName = hello.deviceName,
@@ -261,9 +269,14 @@ class DeviceRegistry(
                 appVersion = hello.capabilities.appVersion,
                 decoders = hello.capabilities.videoDecoders,
                 lastSeenUtc = utcNow(),
+                lastAddress = remoteAddress ?: it.lastAddress,
             )
         }
-        log.log("CONNECTED", link.deviceId, detail = "process ${link.processInstanceId.take(8)}")
+        val moved = previous?.remoteAddress?.let { old -> remoteAddress != null && old != remoteAddress } == true
+        log.log(
+            "CONNECTED", link.deviceId,
+            detail = "from $remoteAddress, process ${link.processInstanceId.take(8)}" + if (moved) " (was ${previous?.remoteAddress})" else "",
+        )
         view(link.deviceId)?.let(onDeviceConnected)
     }
 
@@ -345,6 +358,7 @@ class DeviceRegistry(
             clockAgeMs = clockAgeMs,
             clockAcceptable = live?.clock?.acceptable == true && clockAgeMs != null && clockAgeMs * 1000 <= tuning.clockMaxEstimateAgeUs,
             inventory = record.inventory.map { it.sha256 }.toSet(),
+            address = live?.remoteAddress ?: record.lastAddress,
         )
     }
 

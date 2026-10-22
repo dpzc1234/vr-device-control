@@ -1,6 +1,10 @@
 package com.vrdevicecontrol.controller.host
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.wifi.WifiManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.util.Log
@@ -60,6 +64,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import java.net.Inet4Address
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineDispatcher
@@ -131,11 +136,76 @@ class ControllerHost(
             val port = engine.engine.resolvedConnectors().first().port
             _state.value = HostState(running = true, port = port)
             log.log("SERVER_STARTED", detail = "port $port")
+            acquireLocks()
             advertise(port)
+            watchNetwork(port)
         }
     }
 
+    // --- Network robustness ----------------------------------------------------------------------
+
+    private val wifi = context.applicationContext.getSystemService(WifiManager::class.java)
+    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
+    private var multicastLock: WifiManager.MulticastLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var advertisedAddresses: Set<String> = emptySet()
+    private var readvertiseJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Some Wi-Fi drivers drop multicast in power-save, so discovery queries from headsets never reach
+     * the tablet. Hold a multicast lock and a low-latency Wi-Fi lock while the server runs.
+     */
+    private fun acquireLocks() {
+        runCatching {
+            multicastLock = wifi.createMulticastLock("vrdc-controller").apply { setReferenceCounted(false); acquire() }
+            wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "vrdc-controller").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        }.onFailure { Log.w(TAG, "Could not acquire Wi-Fi locks", it) }
+    }
+
+    private fun ipv4(lp: LinkProperties?): Set<String> =
+        lp?.linkAddresses.orEmpty().map { it.address }.filterIsInstance<Inet4Address>().mapNotNull { it.hostAddress }.toSet()
+
+    /**
+     * When the tablet joins another network or gets a new IP, re-announce the service so headsets
+     * resolve the new address instead of a stale one. Headsets find the tablet; the tablet never
+     * needs to know headset addresses in advance.
+     */
+    private fun watchNetwork(port: Int) {
+        advertisedAddresses = ipv4(connectivity.getLinkProperties(connectivity.activeNetwork))
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
+                val now = ipv4(lp)
+                if (now.isEmpty() || now == advertisedAddresses) return
+                advertisedAddresses = now
+                // Debounce: DHCP and Wi-Fi roaming often produce several changes in a row.
+                readvertiseJob?.cancel()
+                readvertiseJob = scope.launch {
+                    delay(1_500)
+                    log.log("NETWORK_CHANGED", detail = "now ${now.joinToString()}; re-announcing")
+                    readvertise(port)
+                }
+            }
+        }
+        networkCallback = callback
+        runCatching { connectivity.registerDefaultNetworkCallback(callback) }
+    }
+
+    private fun readvertise(port: Int) {
+        registration?.let { runCatching { nsd.unregisterService(it) } }
+        registration = null
+        _state.value = _state.value.copy(advertised = false)
+        advertise(port)
+    }
+
     fun stop() {
+        networkCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }
+        networkCallback = null
+        multicastLock?.takeIf { it.isHeld }?.release()
+        wifiLock?.takeIf { it.isHeld }?.release()
         registration?.let { runCatching { nsd.unregisterService(it) } }
         registration = null
         server?.stop(500, 1_000)
@@ -276,8 +346,9 @@ class ControllerHost(
                         scope.launch { runCatching { session.close(CloseReason(CloseReason.Codes.NORMAL, reason)) } }
                     }
                 }
+                val remoteAddress = call.request.origin.remoteHost
                 val label = withContext(actor) {
-                    registry.onConnected(link, hello)
+                    registry.onConnected(link, hello, remoteAddress)
                     registry.view(deviceId)?.label
                 }
                 link.send(

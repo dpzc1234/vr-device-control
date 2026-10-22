@@ -17,9 +17,12 @@ data class DiscoveredController(
     val serviceName: String,
     val controllerId: String,
     val name: String,
+    /** Primary address, the first of [hosts]. */
     val host: String,
     val port: Int,
     val protocolMajor: Int?,
+    /** Every usable address advertised for the tablet, IPv4 first. */
+    val hosts: List<String> = listOf(host),
 )
 
 sealed interface DiscoveryState {
@@ -116,18 +119,23 @@ class ControllerDiscovery(context: Context) {
             }
 
             override fun onServiceUpdated(resolved: NsdServiceInfo) {
-                val host = resolved.hostAddresses.firstOrNull { it is Inet4Address }
-                    ?: resolved.hostAddresses.firstOrNull()
-                    ?: return
+                // IPv4 first; IPv6 link-local needs a scope ID that URLs can't carry, so skip it.
+                val hosts = resolved.hostAddresses
+                    .filter { it is Inet4Address || !it.isLinkLocalAddress }
+                    .sortedBy { if (it is Inet4Address) 0 else 1 }
+                    .mapNotNull { it.hostAddress }
+                    .distinct()
+                if (hosts.isEmpty()) return
                 val attrs = resolved.attributes.mapValues { (_, v) -> v?.toString(Charsets.UTF_8) }
                 val controllerId = attrs["cid"] ?: return
                 val found = DiscoveredController(
                     serviceName = resolved.serviceName,
                     controllerId = controllerId,
                     name = attrs["name"] ?: resolved.serviceName,
-                    host = host.hostAddress ?: return,
+                    host = hosts.first(),
                     port = resolved.port,
                     protocolMajor = attrs["pv"]?.toIntOrNull(),
+                    hosts = hosts,
                 )
                 _controllers.update { list -> list.filterNot { it.serviceName == found.serviceName } + found }
             }

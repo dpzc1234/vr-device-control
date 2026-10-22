@@ -66,6 +66,8 @@ Exact menu names vary by OS version. If headsets drop offline every time the tab
 | Headset app restarted / slept before Start | Readiness is lost (tile shows the reason). Wake it, then *Retry not ready*. **Unverified** on hardware. |
 | Headset removed or slept during playback | Pauses and records an interruption; resume explicitly or restart. **Unverified** on hardware. |
 | "Pairing revoked" in headset | Pair again (Pairing mode on the tablet). |
+| Headset shows as out of contact after it was restarted | The app does not start by itself after a Quest reboot: open *VR Experience Player* again. It finds the tablet even if either device's IP address changed. |
+| Headsets drop off when the tablet changes Wi-Fi or gets a new IP | The tablet re-announces itself automatically; headsets reconnect within about 15 s. If not, check both are on the same Wi-Fi (Diagnostics lists the tablet's addresses; Headsets shows each headset's last address). |
 
 ## Diagnostics
 

@@ -200,6 +200,7 @@ private fun DeviceCard(d: DeviceView, state: UiState, onRename: () -> Unit, onFo
                 else -> "Active"
             }, Modifier.weight(1f))
             LabeledValue("Last seen", if (d.online) "now" else formatAgo(d.record.lastSeenUtc), Modifier.weight(1f))
+            LabeledValue(if (d.online) "Address" else "Last address", d.address ?: "—", Modifier.weight(1f))
         }
         Spacer(Modifier.height(12.dp))
         status?.takeIf { it.totalBytes > 0 }?.let {

@@ -2,7 +2,9 @@ package com.vrdevicecontrol.headset.net
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
+import android.net.wifi.WifiManager
 import android.util.Log
 import com.vrdevicecontrol.domain.Backoff
 import com.vrdevicecontrol.domain.MonotonicClock
@@ -26,6 +28,7 @@ import com.vrdevicecontrol.protocol.PairingStatus
 import com.vrdevicecontrol.protocol.PingResponse
 import com.vrdevicecontrol.protocol.ProtocolCodec
 import com.vrdevicecontrol.protocol.Welcome
+import java.net.Inet4Address
 import java.security.SecureRandom
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -81,7 +84,7 @@ data class ControllerTarget(val baseUrl: String, val authorization: String)
  * state: losing this connection never changes playback.
  */
 class ControllerConnection(
-    context: Context,
+    private val context: Context,
     private val identity: HeadsetIdentity,
     private val discovery: ControllerDiscovery,
     private val clock: MonotonicClock,
@@ -117,9 +120,28 @@ class ControllerConnection(
     private var pairingJob: Job? = null
 
     fun start() {
+        // Keep Wi-Fi out of power-save while the app runs: fewer dropped heartbeats, steadier clock sync.
+        // Low-latency locks only take effect while the app is in the foreground with the display on.
+        runCatching {
+            context.applicationContext.getSystemService(WifiManager::class.java)
+                .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "vrdc-headset").apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }
+        localAddresses = ipv4Addresses(connectivity.getLinkProperties(connectivity.activeNetwork))
         connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) = reconnectNow("Network available")
             override fun onLost(network: Network) = Unit // Heartbeat expiry detects a dead link.
+
+            override fun onLinkPropertiesChanged(network: Network, lp: LinkProperties) {
+                // Same Wi-Fi but a new IP (DHCP renewal, router restart): the old socket is dead,
+                // so reconnect now instead of waiting for heartbeats to time out.
+                val now = ipv4Addresses(lp)
+                val before = localAddresses
+                localAddresses = now
+                if (before.isNotEmpty() && now.isNotEmpty() && now != before) reconnectNow("Headset IP address changed")
+            }
         })
         scope.launch { runLoop() }
     }
@@ -184,13 +206,26 @@ class ControllerConnection(
                 continue
             }
             discovery.start()
-            val address = resolve(pairing)
-            if (address == null) {
+            val candidates = resolve(pairing)
+            if (candidates.isEmpty()) {
                 _state.value = LinkState.Waiting("Looking for ${pairing.controllerName}")
                 waitBackoff(backoff)
                 continue
             }
-            val outcome = connectOnce(pairing, address.first, address.second)
+            // The tablet's IP may have changed: try what discovery sees now, then the remembered address.
+            var outcome = Outcome.FAILED
+            lastFailure = null
+            for ((host, port) in candidates) {
+                outcome = connectOnce(pairing, host, port)
+                if (outcome != Outcome.FAILED) break
+            }
+            if (outcome == Outcome.FAILED) {
+                failedRounds++
+                // Discovery results can be stale after network changes; refresh them periodically.
+                if (failedRounds % 3 == 0) discovery.restart()
+            } else {
+                failedRounds = 0
+            }
             when (outcome) {
                 Outcome.UNAUTHORIZED -> {
                     _state.value = LinkState.Unauthorized
@@ -202,7 +237,8 @@ class ControllerConnection(
                     waitBackoff(backoff)
                 }
                 Outcome.FAILED -> {
-                    _state.value = LinkState.Waiting("Cannot reach ${pairing.controllerName}")
+                    val reason = lastFailure?.let { " ($it)" } ?: ""
+                    _state.value = LinkState.Waiting("Cannot reach ${pairing.controllerName}$reason. Retrying…")
                     waitBackoff(backoff)
                 }
             }
@@ -214,13 +250,33 @@ class ControllerConnection(
     }
 
     /** Discovery result for our paired controller first; the remembered address is only a hint. */
-    private suspend fun resolve(pairing: Pairing): Pair<String, Int>? {
+    /**
+     * Candidate addresses for the paired tablet, in order: everything discovery currently advertises
+     * for it, then the remembered address (only a hint; DHCP may have moved the tablet).
+     */
+    private suspend fun resolve(pairing: Pairing): List<Pair<String, Int>> {
         _state.value = LinkState.Searching(pairing.controllerName)
         val found = withTimeoutOrNull(3_000) {
             discovery.controllers.first { list -> list.any { it.controllerId == pairing.controllerId } }
-        }?.firstOrNull { it.controllerId == pairing.controllerId }
-        if (found != null) return found.host to found.port
-        return if (pairing.hostHint.isNotBlank() && pairing.portHint > 0) pairing.hostHint to pairing.portHint else null
+        }?.filter { it.controllerId == pairing.controllerId }.orEmpty()
+        val candidates = found.flatMap { c -> c.hosts.map { it to c.port } }.toMutableList()
+        if (pairing.hostHint.isNotBlank() && pairing.portHint > 0) candidates += pairing.hostHint to pairing.portHint
+        return candidates.distinct()
+    }
+
+    @Volatile private var lastFailure: String? = null
+    private var failedRounds = 0
+    private var localAddresses: Set<String> = emptySet()
+
+    private fun ipv4Addresses(lp: LinkProperties?): Set<String> =
+        lp?.linkAddresses.orEmpty().map { it.address }.filterIsInstance<Inet4Address>().mapNotNull { it.hostAddress }.toSet()
+
+    /** Short, IP-free reason for the setup panel. */
+    private fun describe(error: Throwable): String = when (error) {
+        is java.net.ConnectException -> "connection refused or blocked"
+        is java.net.SocketTimeoutException -> "no answer"
+        is java.net.NoRouteToHostException -> "not on the same network"
+        else -> "network error"
     }
 
     private enum class Outcome { WAS_CONNECTED, FAILED, UNAUTHORIZED }
@@ -268,9 +324,15 @@ class ControllerConnection(
         try {
             when (val first = withTimeoutOrNull(6_000) { events.receive() }) {
                 WsEvent.Open -> Unit
-                is WsEvent.Failed -> return if (first.httpCode == 401 || first.httpCode == 403) Outcome.UNAUTHORIZED else Outcome.FAILED
+                is WsEvent.Failed -> {
+                    lastFailure = describe(first.error)
+                    return if (first.httpCode == 401 || first.httpCode == 403) Outcome.UNAUTHORIZED else Outcome.FAILED
+                }
                 is WsEvent.Closed -> return if (first.code == CLOSE_UNAUTHORIZED) Outcome.UNAUTHORIZED else Outcome.FAILED
-                else -> return Outcome.FAILED
+                else -> {
+                    lastFailure = "no answer"
+                    return Outcome.FAILED
+                }
             }
             send(MessageType.HELLO, helloProvider())
             val welcomed = when (val e = withTimeoutOrNull(6_000) { events.receive() }) {
