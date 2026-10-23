@@ -54,6 +54,7 @@ Headset validation order: receiver process → connection → controller epoch �
 | `STARTED` / `COMPLETED` / `RUN_ERROR` | H→T | live observed events (convenience) |
 | `RESULT_BATCH` / `RESULTS_ACK` | H→T / T→H | journaled run records — the source of truth after reconnect |
 | `CANCEL_START`, `PAUSE`, `RESUME`, `STOP` → `CONTROL_RESULT` | T→H → H→T | `validUntilControllerUs` (3 s window) |
+| `DEVICE_CONFIG` | T→H | `startOnBoot` — whether the headset app should launch after reboot (also reported on `STATUS`) |
 | `ERROR` | both | typed error for undecodable/unknown messages |
 
 ## Error codes

@@ -18,9 +18,11 @@ import com.vrdevicecontrol.controller.transfer.RemovalOutcome
 import com.vrdevicecontrol.controller.transfer.TransferJob
 import com.vrdevicecontrol.domain.Run
 import com.vrdevicecontrol.domain.RunPhase
+import com.vrdevicecontrol.protocol.DeviceConfig
 import com.vrdevicecontrol.protocol.EyeOrder
 import com.vrdevicecontrol.protocol.MessageType
 import com.vrdevicecontrol.protocol.Projection
+import com.vrdevicecontrol.protocol.ProtocolCodec
 import com.vrdevicecontrol.protocol.StereoLayout
 import java.io.File
 import java.net.Inet4Address
@@ -255,6 +257,15 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissPairing(requestId: String) = act { registry.dismissPairing(requestId) }
     fun rename(deviceId: String, label: String) = act { registry.rename(deviceId, label) }
     fun revoke(deviceId: String) = act("Headset forgotten — it must pair again") { registry.revoke(deviceId) }
+
+    fun setStartOnBoot(deviceId: String, enabled: Boolean) = act {
+        registry.setStartOnBoot(deviceId, enabled)
+        // Offline: preference is stored and pushed on the next connect (see ControllerHost).
+        registry.link(deviceId)?.send(
+            MessageType.DEVICE_CONFIG,
+            ProtocolCodec.forController().toPayload(DeviceConfig(enabled)),
+        )
+    }
 
     fun thumbnail(assetId: String): File? = graph.catalog.thumbnail(assetId)
 

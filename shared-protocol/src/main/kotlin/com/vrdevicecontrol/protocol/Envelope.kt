@@ -68,12 +68,13 @@ object MessageType {
     const val STOP = "STOP"
     const val RESULT_BATCH = "RESULT_BATCH"
     const val RESULTS_ACK = "RESULTS_ACK"
+    const val DEVICE_CONFIG = "DEVICE_CONFIG"
     const val ERROR = "ERROR"
 
     /** Types the controller may send; anything else from the controller is an unknown command. */
     val CONTROLLER_TO_HEADSET = setOf(
         WELCOME, HEARTBEAT, CLOCK_REPLY, ENSURE_ASSET, REMOVE_ASSET, PREPARE, START_AT,
-        CANCEL_START, PAUSE, RESUME, STOP, RESULTS_ACK, ERROR,
+        CANCEL_START, PAUSE, RESUME, STOP, RESULTS_ACK, DEVICE_CONFIG, ERROR,
     )
 
     /** Types a headset may send. */

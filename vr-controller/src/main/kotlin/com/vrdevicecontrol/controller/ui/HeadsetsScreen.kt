@@ -101,7 +101,12 @@ fun HeadsetsScreen(state: UiState, vm: ControllerViewModel) {
                 }
             } else {
                 items(state.devices, key = { it.deviceId }) { d ->
-                    DeviceCard(d, state, onRename = { renaming = d }, onForget = { forgetting = d })
+                    DeviceCard(
+                        d, state,
+                        onRename = { renaming = d },
+                        onForget = { forgetting = d },
+                        onStartOnBoot = { vm.setStartOnBoot(d.deviceId, it) },
+                    )
                 }
             }
         }
@@ -169,7 +174,13 @@ private fun PairingCard(p: PendingPairing, vm: ControllerViewModel) {
 }
 
 @Composable
-private fun DeviceCard(d: DeviceView, state: UiState, onRename: () -> Unit, onForget: () -> Unit) {
+private fun DeviceCard(
+    d: DeviceView,
+    state: UiState,
+    onRename: () -> Unit,
+    onForget: () -> Unit,
+    onStartOnBoot: (Boolean) -> Unit,
+) {
     val status = d.status
     Panel(highlight = if (d.online) null else Tone.WARN) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -220,6 +231,19 @@ private fun DeviceCard(d: DeviceView, state: UiState, onRename: () -> Unit, onFo
                 tone = if (d.online && !d.clockAcceptable) Tone.WARN else null)
         }
         Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Start on boot", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (d.online) "Opens the player after the headset restarts"
+                    else "Saved — applied when this headset reconnects",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = d.record.startOnBoot, onCheckedChange = onStartOnBoot)
+        }
+        Spacer(Modifier.height(8.dp))
         TextButton(onClick = onForget, colors = ButtonDefaults.textButtonColors(contentColor = toneColor(Tone.BAD))) { Text("Forget headset") }
     }
 }

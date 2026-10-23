@@ -18,6 +18,7 @@ import com.vrdevicecontrol.protocol.CatalogPage
 import com.vrdevicecontrol.protocol.ClockProbe
 import com.vrdevicecontrol.protocol.ClockReply
 import com.vrdevicecontrol.protocol.DecodeResult
+import com.vrdevicecontrol.protocol.DeviceConfig
 import com.vrdevicecontrol.protocol.DeviceCredential
 import com.vrdevicecontrol.protocol.Endpoints
 import com.vrdevicecontrol.protocol.Envelope
@@ -347,15 +348,26 @@ class ControllerHost(
                     }
                 }
                 val remoteAddress = call.request.origin.remoteHost
-                val label = withContext(actor) {
+                val connected = withContext(actor) {
                     registry.onConnected(link, hello, remoteAddress)
-                    registry.view(deviceId)?.label
+                    registry.view(deviceId)
                 }
                 link.send(
                     MessageType.WELCOME,
                     codec.toPayload(
-                        Welcome(controllerId, controllerName, controllerEpoch, connectionId, heartbeatIntervalMs = tuning.heartbeatIntervalMs, staleAfterMs = tuning.staleAfterMs, deviceLabel = label),
+                        Welcome(
+                            controllerId, controllerName, controllerEpoch, connectionId,
+                            heartbeatIntervalMs = tuning.heartbeatIntervalMs,
+                            staleAfterMs = tuning.staleAfterMs,
+                            deviceLabel = connected?.label,
+                        ),
                     ),
+                )
+                // Push operator prefs so a rebooted headset matches the tablet even if its local
+                // default differs (e.g. freshly installed, or toggled while offline).
+                link.send(
+                    MessageType.DEVICE_CONFIG,
+                    codec.toPayload(DeviceConfig(startOnBoot = connected?.record?.startOnBoot ?: true)),
                 )
 
                 var lastInboundUs = clock.nowUs()

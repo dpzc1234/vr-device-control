@@ -355,6 +355,7 @@ private class SimHeadset(
                 val ids = codec.payloadOf<ResultsAck>(env).recordIds.toSet()
                 outbox.removeAll { it.recordId in ids }
             }
+            MessageType.DEVICE_CONFIG -> Unit // No-op: simulators are not real devices.
             else -> Unit
         }
     }

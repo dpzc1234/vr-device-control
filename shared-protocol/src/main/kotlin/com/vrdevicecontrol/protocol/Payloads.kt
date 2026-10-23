@@ -62,6 +62,14 @@ data class HeadsetStatus(
     val totalBytes: Long = 0,
     val transfersDeferred: Boolean = false,
     val lastError: ErrorInfo? = null,
+    /** Whether the headset app launches itself after a reboot. */
+    val startOnBoot: Boolean = true,
+)
+
+/** Operator preferences pushed from the tablet; applied locally on the headset. */
+@Serializable
+data class DeviceConfig(
+    val startOnBoot: Boolean,
 )
 
 // --- Clock ----------------------------------------------------------------------------------

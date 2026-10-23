@@ -3,6 +3,7 @@ package com.vrdevicecontrol.headset
 import android.app.Application
 import android.os.Build
 import com.vrdevicecontrol.domain.Tuning
+import com.vrdevicecontrol.headset.boot.StartOnBoot
 import com.vrdevicecontrol.headset.content.LocalContentRepository
 import com.vrdevicecontrol.headset.identity.HeadsetIdentity
 import com.vrdevicecontrol.headset.net.ControllerConnection
@@ -27,6 +28,7 @@ class HeadsetApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        StartOnBoot.syncComponent(this)
         graph = HeadsetGraph(this).also { it.start() }
     }
 }

@@ -13,6 +13,7 @@ import com.vrdevicecontrol.domain.MonotonicClock
 import com.vrdevicecontrol.domain.SessionEffect
 import com.vrdevicecontrol.domain.SessionInput
 import com.vrdevicecontrol.domain.Tuning
+import com.vrdevicecontrol.headset.boot.StartOnBoot
 import com.vrdevicecontrol.headset.content.LocalContentRepository
 import com.vrdevicecontrol.headset.identity.HeadsetIdentity
 import com.vrdevicecontrol.headset.net.ControllerConnection
@@ -26,6 +27,7 @@ import com.vrdevicecontrol.protocol.AssetDescriptor
 import com.vrdevicecontrol.protocol.Completed
 import com.vrdevicecontrol.protocol.Control
 import com.vrdevicecontrol.protocol.ControlResult
+import com.vrdevicecontrol.protocol.DeviceConfig
 import com.vrdevicecontrol.protocol.EnsureAsset
 import com.vrdevicecontrol.protocol.Envelope
 import com.vrdevicecontrol.protocol.ErrorCode
@@ -183,6 +185,12 @@ class HeadsetSessionCoordinator(
                     connection.send(MessageType.ASSET_RESULT, result, correlationId = env.messageId)
                 }
                 MessageType.RESULTS_ACK -> journal.acknowledge(codec.payloadOf<ResultsAck>(env).recordIds)
+                MessageType.DEVICE_CONFIG -> {
+                    val config = codec.payloadOf<DeviceConfig>(env)
+                    StartOnBoot.setEnabled(context, config.startOnBoot)
+                    Log.i(TAG, "Start on boot ${if (config.startOnBoot) "enabled" else "disabled"}")
+                    sendStatus()
+                }
                 MessageType.ERROR -> Log.w(TAG, "Controller reported ${codec.payloadOf<ErrorMessage>(env)}")
                 else -> Unit
             }
@@ -407,6 +415,7 @@ class HeadsetSessionCoordinator(
             totalBytes = power.totalBytes,
             transfersDeferred = content.deferred.value,
             lastError = s.lastError,
+            startOnBoot = StartOnBoot.isEnabled(context),
         )
     }
 

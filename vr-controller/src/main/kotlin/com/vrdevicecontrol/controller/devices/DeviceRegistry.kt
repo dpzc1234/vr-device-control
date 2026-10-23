@@ -65,6 +65,8 @@ data class DeviceRecord(
     val inventory: List<InventoryItem> = emptyList(),
     /** Address the headset last connected from; changes freely with DHCP and is display-only. */
     val lastAddress: String? = null,
+    /** Operator preference: launch the headset app after reboot. Pushed on connect and when toggled. */
+    val startOnBoot: Boolean = true,
 )
 
 @Serializable
@@ -241,6 +243,18 @@ class DeviceRegistry(
         val clean = label.trim().take(32).ifEmpty { return }
         saveRecords(_records.value.map { if (it.deviceId == deviceId) it.copy(label = clean) else it })
         log.log("DEVICE_RENAMED", deviceId, detail = clean)
+    }
+
+    /**
+     * Stores the operator's start-on-boot preference. Callers that hold a [DeviceLink] should also
+     * send [com.vrdevicecontrol.protocol.MessageType.DEVICE_CONFIG] so an online headset applies it
+     * immediately; offline headsets pick it up on the next connect.
+     */
+    fun setStartOnBoot(deviceId: String, enabled: Boolean) {
+        val current = _records.value.firstOrNull { it.deviceId == deviceId } ?: return
+        if (current.startOnBoot == enabled) return
+        updateRecord(deviceId) { it.copy(startOnBoot = enabled) }
+        log.log(if (enabled) "START_ON_BOOT_ON" else "START_ON_BOOT_OFF", deviceId)
     }
 
     /** Deletes the pairing. The headset must pair again before it can connect. */
