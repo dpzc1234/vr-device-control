@@ -12,6 +12,7 @@ import com.meta.spatial.toolkit.PanelStyleOptions
 import com.meta.spatial.toolkit.QuadShapeOptions
 import com.meta.spatial.toolkit.UIPanelSettings
 import com.meta.spatial.vr.VRFeature
+import com.vrdevicecontrol.headset.boot.BootLaunchGuard
 import com.vrdevicecontrol.headset.playback.ExoPlaybackEngine
 import com.vrdevicecontrol.headset.scene.ImmersiveScene
 import com.vrdevicecontrol.headset.ui.HeadsetPanel
@@ -46,6 +47,16 @@ class HeadsetActivity : AppSystemActivity() {
         val scene = ImmersiveScene(this).also { it.onSceneReady() }
         immersive = scene
         graph.session.attachPlayer(ExoPlaybackEngine(this, scene), scene)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        BootLaunchGuard.onActivityResumed(taskId)
+    }
+
+    override fun onPause() {
+        BootLaunchGuard.onActivityPaused(taskId)
+        super.onPause()
     }
 
     override fun onSessionStateChanged(state: SessionState) {

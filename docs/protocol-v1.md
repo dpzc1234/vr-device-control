@@ -55,6 +55,7 @@ Headset validation order: receiver process → connection → controller epoch �
 | `RESULT_BATCH` / `RESULTS_ACK` | H→T / T→H | journaled run records — the source of truth after reconnect |
 | `CANCEL_START`, `PAUSE`, `RESUME`, `STOP` → `CONTROL_RESULT` | T→H → H→T | `validUntilControllerUs` (3 s window) |
 | `DEVICE_CONFIG` | T→H | `startOnBoot` — whether the headset app should launch after reboot (also reported on `STATUS`) |
+| `RECENTER` / `RECENTER_RESULT` | T→H / H→T | Immediate operator request to align app space with the rider's current pose; accepted only while worn, active and between runs |
 | `ERROR` | both | typed error for undecodable/unknown messages |
 
 ## Error codes

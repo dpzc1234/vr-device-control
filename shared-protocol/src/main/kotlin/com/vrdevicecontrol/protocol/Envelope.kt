@@ -5,7 +5,7 @@ import kotlinx.serialization.builtins.LongAsStringSerializer
 import kotlinx.serialization.json.JsonObject
 
 const val PROTOCOL_MAJOR = 1
-const val PROTOCOL_MINOR = 0
+const val PROTOCOL_MINOR = 1
 
 /** Maximum encoded size of one control message. Media never travels over the control socket. */
 const val MAX_CONTROL_MESSAGE_BYTES = 64 * 1024
@@ -69,19 +69,21 @@ object MessageType {
     const val RESULT_BATCH = "RESULT_BATCH"
     const val RESULTS_ACK = "RESULTS_ACK"
     const val DEVICE_CONFIG = "DEVICE_CONFIG"
+    const val RECENTER = "RECENTER"
+    const val RECENTER_RESULT = "RECENTER_RESULT"
     const val ERROR = "ERROR"
 
     /** Types the controller may send; anything else from the controller is an unknown command. */
     val CONTROLLER_TO_HEADSET = setOf(
         WELCOME, HEARTBEAT, CLOCK_REPLY, ENSURE_ASSET, REMOVE_ASSET, PREPARE, START_AT,
-        CANCEL_START, PAUSE, RESUME, STOP, RESULTS_ACK, DEVICE_CONFIG, ERROR,
+        CANCEL_START, PAUSE, RESUME, STOP, RESULTS_ACK, DEVICE_CONFIG, RECENTER, ERROR,
     )
 
     /** Types a headset may send. */
     val HEADSET_TO_CONTROLLER = setOf(
         HELLO, HEARTBEAT, STATUS, CLOCK_PROBE, CLOCK_STATUS, INVENTORY, TRANSFER_PROGRESS,
         ASSET_RESULT, READY, NOT_READY, START_ACCEPTED, STARTED, COMPLETED, RUN_ERROR,
-        CONTROL_RESULT, RESULT_BATCH, ERROR,
+        CONTROL_RESULT, RESULT_BATCH, RECENTER_RESULT, ERROR,
     )
 
     /** Session commands must carry run, epoch, generation and receiver process identifiers. */

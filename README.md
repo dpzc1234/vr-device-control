@@ -98,6 +98,11 @@ done
 
 On first launch, pair each headset with the tablet. See [docs/operations.md](docs/operations.md#first-time-setup).
 
+Start on boot is enabled by default and configurable per headset on the tablet. At boot the player
+also makes three best-effort attempts to bring its own task back to the foreground if a Horizon OS
+panel such as the Store covers it. A normal APK cannot force-stop Meta system apps; deployments
+that require exclusive single-app behavior should use supported managed-device/kiosk policies.
+
 ## 6. Updating
 
 Rebuild, then run the same `adb install -r` commands. `-r` keeps the app's data: pairing, downloaded videos and run history all survive an update.
@@ -142,6 +147,7 @@ Debug and release builds are signed with different keys. Moving a device from on
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Installed copy was signed with a different key; `adb uninstall <application id>` first (loses data, see section 6) |
 | `INSTALL_FAILED_NO_MATCHING_ABIS` for the headset APK | You are installing on a non-Quest device or emulator; the headset APK is arm64 and Horizon OS only |
 | Headset app not in the main app list | It is under *Library → Unknown sources* |
+| Store appears over the player after boot | Wait up to 15 seconds for the boot focus retries. If it remains, open the player manually. The app cannot force-stop Meta system apps; qualify managed-device/kiosk deployment if exclusive launch is required. |
 
 ## Developing without headsets
 

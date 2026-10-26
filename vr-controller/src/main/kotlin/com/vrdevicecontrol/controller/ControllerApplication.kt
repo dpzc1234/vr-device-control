@@ -27,6 +27,7 @@ import com.vrdevicecontrol.protocol.MessageType
 import com.vrdevicecontrol.protocol.ProtocolCodec
 import com.vrdevicecontrol.protocol.ResultBatch
 import com.vrdevicecontrol.protocol.ResultsAck
+import com.vrdevicecontrol.protocol.RecenterResult
 import com.vrdevicecontrol.protocol.TransferProgress
 import java.io.File
 import java.io.OutputStream
@@ -142,6 +143,7 @@ class ControllerGraph(app: Application) {
                 MessageType.INVENTORY -> registry.onInventory(m.deviceId, codec.payloadOf<Inventory>(env))
                 MessageType.TRANSFER_PROGRESS -> transfers.onProgress(m.deviceId, codec.payloadOf<TransferProgress>(env))
                 MessageType.ASSET_RESULT -> transfers.onAssetResult(m.deviceId, codec.payloadOf<AssetResult>(env))
+                MessageType.RECENTER_RESULT -> registry.onRecenterResult(m.deviceId, codec.payloadOf<RecenterResult>(env))
                 MessageType.RESULT_BATCH -> {
                     val ids = runs.onRecords(m.deviceId, codec.payloadOf<ResultBatch>(env).records)
                     registry.link(m.deviceId)?.send(MessageType.RESULTS_ACK, codec.toPayload(ResultsAck(ids)))

@@ -40,6 +40,8 @@ import com.vrdevicecontrol.protocol.NotReady
 import com.vrdevicecontrol.protocol.PlaybackState
 import com.vrdevicecontrol.protocol.Prepare
 import com.vrdevicecontrol.protocol.Ready
+import com.vrdevicecontrol.protocol.Recenter
+import com.vrdevicecontrol.protocol.RecenterResult
 import com.vrdevicecontrol.protocol.RemoveAsset
 import com.vrdevicecontrol.protocol.ResultBatch
 import com.vrdevicecontrol.protocol.ResultsAck
@@ -191,6 +193,7 @@ class HeadsetSessionCoordinator(
                     Log.i(TAG, "Start on boot ${if (config.startOnBoot) "enabled" else "disabled"}")
                     sendStatus()
                 }
+                MessageType.RECENTER -> handleRecenter(env)
                 MessageType.ERROR -> Log.w(TAG, "Controller reported ${codec.payloadOf<ErrorMessage>(env)}")
                 else -> Unit
             }
@@ -198,6 +201,56 @@ class HeadsetSessionCoordinator(
             Log.e(TAG, "Failed to handle ${env.type}", e)
             connection.send(MessageType.ERROR, ErrorMessage(ErrorInfo(ErrorCode.MALFORMED, e.message), env.type), correlationId = env.messageId)
         }
+    }
+
+    private fun handleRecenter(env: Envelope) {
+        // Decode even though the command currently has no fields, so a malformed payload is rejected.
+        codec.payloadOf<Recenter>(env)
+        val welcome = connection.welcome
+        if (env.receiverInstanceId != identity.processInstanceId || welcome == null ||
+            env.connectionId != welcome.connectionId || env.senderId != welcome.controllerId ||
+            env.controllerEpoch != welcome.controllerEpoch
+        ) {
+            sendRecenterResult(env, RecenterResult(false, error = ErrorInfo(ErrorCode.STALE_CONNECTION, "Request addressed to a stale headset connection")))
+            return
+        }
+
+        val fingerprint = codec.fingerprint(env)
+        when (val lookup = dedup.lookup(env.messageId, fingerprint)) {
+            is CommandDeduplicator.Lookup.Duplicate -> {
+                lookup.result.forEach { connection.send(it.type, it.payload, env.messageId, it.runId, it.generation) }
+                return
+            }
+            CommandDeduplicator.Lookup.Conflict -> {
+                sendRecenterResult(env, RecenterResult(false, error = ErrorInfo(ErrorCode.DUPLICATE_CONFLICT, "Message ID reused with different content")))
+                return
+            }
+            CommandDeduplicator.Lookup.New -> Unit
+        }
+
+        val s = _state.value
+        val result = when {
+            scene == null || !s.appActive || !worn -> RecenterResult(
+                false,
+                error = ErrorInfo(ErrorCode.NOT_ACTIVE, "The headset must be worn with the player visible"),
+            )
+            s.playback in setOf(PlaybackState.ARMED, PlaybackState.PLAYING, PlaybackState.PAUSED) -> RecenterResult(
+                false,
+                error = ErrorInfo(ErrorCode.INVALID_STATE, "Recenter is available only between runs"),
+            )
+            else -> runCatching {
+                scene!!.recenterToCurrentPose()
+                RecenterResult(true, centeredAtUs = clock.nowUs())
+            }.getOrElse { RecenterResult(false, error = ErrorInfo(ErrorCode.NOT_ACTIVE, it.message ?: "Scene recenter failed")) }
+        }
+        val payload = codec.toPayload(result)
+        dedup.record(env.messageId, fingerprint, listOf(CachedReply(MessageType.RECENTER_RESULT, payload, null, null)))
+        connection.send(MessageType.RECENTER_RESULT, payload, correlationId = env.messageId)
+        if (result.accepted) Log.i(TAG, "Scene recentered by operator request")
+    }
+
+    private fun sendRecenterResult(env: Envelope, result: RecenterResult) {
+        connection.send(MessageType.RECENTER_RESULT, result, correlationId = env.messageId)
     }
 
     private fun handleSession(env: Envelope) {

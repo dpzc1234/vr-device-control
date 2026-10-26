@@ -15,6 +15,7 @@ import com.vrdevicecontrol.protocol.InventoryItem
 import com.vrdevicecontrol.protocol.PairingRequest
 import com.vrdevicecontrol.protocol.PairingStatus
 import com.vrdevicecontrol.protocol.PlaybackState
+import com.vrdevicecontrol.protocol.RecenterResult
 import java.io.File
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -80,6 +81,9 @@ data class LiveDevice(
     val clock: ClockStatus? = null,
     val clockReceivedAtUs: Long = 0,
     val inventoryPages: Map<Int, List<InventoryItem>> = emptyMap(),
+    val recenterResult: RecenterResult? = null,
+    val recenterReceivedAtUs: Long = 0,
+    val recenterPending: Boolean = false,
 )
 
 data class PendingPairing(
@@ -108,6 +112,9 @@ data class DeviceView(
     val inventory: Set<String>,
     /** Current address while online, otherwise the last one seen. */
     val address: String? = null,
+    val recenterResult: RecenterResult? = null,
+    val recenterAgeMs: Long? = null,
+    val recenterPending: Boolean = false,
 ) {
     val deviceId get() = record.deviceId
     val label get() = record.label
@@ -289,7 +296,7 @@ class DeviceRegistry(
         val moved = previous?.remoteAddress?.let { old -> remoteAddress != null && old != remoteAddress } == true
         log.log(
             "CONNECTED", link.deviceId,
-            detail = "from $remoteAddress, process ${link.processInstanceId.take(8)}" + if (moved) " (was ${previous?.remoteAddress})" else "",
+            detail = "from $remoteAddress, process ${link.processInstanceId.take(8)}" + if (moved) " (was ${previous.remoteAddress})" else "",
         )
         view(link.deviceId)?.let(onDeviceConnected)
     }
@@ -325,6 +332,27 @@ class DeviceRegistry(
 
     fun onClock(deviceId: String, status: ClockStatus) {
         _live.update { map -> map[deviceId]?.let { map + (deviceId to it.copy(clock = status, clockReceivedAtUs = clock.nowUs())) } ?: map }
+    }
+
+    fun onRecenterResult(deviceId: String, result: RecenterResult) {
+        _live.update { map ->
+            map[deviceId]?.let {
+                map + (deviceId to it.copy(recenterResult = result, recenterReceivedAtUs = clock.nowUs(), recenterPending = false))
+            } ?: map
+        }
+        log.log(
+            if (result.accepted) "RECENTERED" else "RECENTER_FAILED",
+            deviceId,
+            detail = result.error?.detail,
+        )
+    }
+
+    fun onRecenterRequested(deviceId: String) {
+        _live.update { map ->
+            map[deviceId]?.let {
+                map + (deviceId to it.copy(recenterResult = null, recenterReceivedAtUs = 0, recenterPending = true))
+            } ?: map
+        }
     }
 
     fun onInventory(deviceId: String, page: Inventory) {
@@ -373,6 +401,9 @@ class DeviceRegistry(
             clockAcceptable = live?.clock?.acceptable == true && clockAgeMs != null && clockAgeMs * 1000 <= tuning.clockMaxEstimateAgeUs,
             inventory = record.inventory.map { it.sha256 }.toSet(),
             address = live?.remoteAddress ?: record.lastAddress,
+            recenterResult = live?.recenterResult,
+            recenterAgeMs = live?.recenterResult?.let { (now - live.recenterReceivedAtUs) / 1_000 },
+            recenterPending = live?.recenterPending == true,
         )
     }
 

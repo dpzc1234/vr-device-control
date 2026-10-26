@@ -115,4 +115,30 @@ class ProtocolCodecTest {
         assertEquals(null, DeviceCredential.parse("Basic abc.def"))
         assertEquals(null, DeviceCredential.parse(null))
     }
+
+    @Test
+    fun `round trips recenter request and result`() {
+        val request = Envelope(
+            type = MessageType.RECENTER,
+            messageId = "center-1",
+            senderId = "controller",
+            senderInstanceId = "controller-proc",
+            connectionId = "conn",
+            receiverInstanceId = "headset-proc",
+            payload = headsetCodec.toPayload(Recenter),
+        )
+        assertIs<DecodeResult.Ok>(headsetCodec.decode(headsetCodec.encode(request)))
+
+        val controllerCodec = ProtocolCodec.forController()
+        val response = request.copy(
+            type = MessageType.RECENTER_RESULT,
+            senderId = "headset",
+            senderInstanceId = "headset-proc",
+            receiverInstanceId = null,
+            correlationId = request.messageId,
+            payload = controllerCodec.toPayload(RecenterResult(accepted = true, centeredAtUs = 42L)),
+        )
+        val decoded = assertIs<DecodeResult.Ok>(controllerCodec.decode(controllerCodec.encode(response))).envelope
+        assertEquals(42L, controllerCodec.payloadOf<RecenterResult>(decoded).centeredAtUs)
+    }
 }

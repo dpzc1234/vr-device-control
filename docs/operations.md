@@ -40,6 +40,12 @@ Exact menu names vary by OS version. If headsets drop offline every time the tab
 4. On the tablet, approve the request only if the code matches. Rename headsets (e.g. "Headset 1"); the name appears inside the headset.
 5. If a headset finds nothing: Setup → *Enter address manually* with the address and port from the tablet's **Diagnostics** screen → *Test connection*. "Cannot reach" plus "discovery found nothing" usually means client isolation on the Wi-Fi; use an allowed local network or hotspot.
 
+**Start on boot:** this is enabled by default per headset. After `BOOT_COMPLETED`, the player opens
+and makes best-effort foreground retries at 3, 8 and 15 seconds if a Horizon OS panel covers it.
+Android does not allow a normal app to force-stop the Store or other apps. If the Store remains in
+front, open the player manually. For unattended, exclusive-app boot, qualify a supported Meta
+managed-device/kiosk deployment rather than relying on process-killing commands.
+
 ## Content
 
 1. **Library → Import video** (system file picker). The file is copied into the tablet and checksummed; nothing streams later.
@@ -48,13 +54,14 @@ Exact menu names vary by OS version. If headsets drop offline every time the tab
 
 ## Running a session
 
-1. **Run → Choose video**. All online headsets are selected; tap tiles to change the selection.
-2. **Prepare**. Participants freeze. Each headset loads the video silently behind its standby scene and syncs its clock. Tiles show *Ready* or the reason they are not.
-3. If one is not ready: wait, *Retry not ready*, or remove it from the run via its ⋮ menu. Nothing is removed silently.
-4. Press **START** when participants are ready. "Starting…" covers the ~2 s coordination delay; the video (including its own countdown) then plays from the beginning.
-5. Tiles distinguish *Start accepted* from *Playing* (observed) and show *Outcome unknown* when no acknowledgement arrived. Headsets out of contact keep playing; their progress is marked *estimated*.
-6. Pause / Resume / Stop reach only headsets in contact and report per-device results; nothing is queued for later. **Restart** stops reachable headsets and prepares a new generation from zero — press Start again.
-7. When results are in (headsets upload them on reconnect), **New run**.
+1. Put the headsets on the riders and have everyone face the intended forward direction. In **Headsets**, press **Recenter** on each card or **Recenter all**. Wait for *Recenter confirmed*. The action is available only while the player is visible, the headset is worn, and no run is armed/playing/paused.
+2. **Run → Choose video**. All online headsets are selected; tap tiles to change the selection.
+3. **Prepare**. Participants freeze. Each headset loads the video silently behind its standby scene and syncs its clock. Tiles show *Ready* or the reason they are not.
+4. If one is not ready: wait, *Retry not ready*, or remove it from the run via its ⋮ menu. Nothing is removed silently.
+5. Press **START** when participants are ready. "Starting…" covers the ~2 s coordination delay; the video (including its own countdown) then plays from the beginning.
+6. Tiles distinguish *Start accepted* from *Playing* (observed) and show *Outcome unknown* when no acknowledgement arrived. Headsets out of contact keep playing; their progress is marked *estimated*.
+7. Pause / Resume / Stop reach only headsets in contact and report per-device results; nothing is queued for later. **Restart** stops reachable headsets and prepares a new generation from zero — press Start again.
+8. When results are in (headsets upload them on reconnect), **New run**.
 
 ## Recovery
 
@@ -64,6 +71,7 @@ Exact menu names vary by OS version. If headsets drop offline every time the tab
 | Headset missed the start | Stays in standby; it never joins late. Include it in the next run. |
 | Tablet app restarted mid-run | Headsets are unaffected. The tablet shows the previous run with a banner; results reconcile as headsets report. Close it before a new run. |
 | Headset app restarted / slept before Start | Readiness is lost (tile shows the reason). Wake it, then *Retry not ready*. **Unverified** on hardware. |
+| Recenter fails | Confirm the headset is worn, the player is visible, it is online, and no run is armed/playing/paused. Face forward and retry. App-level recenter does not change Guardian/boundary data. **Unverified** on hardware. |
 | Headset removed or slept during playback | Pauses and records an interruption; resume explicitly or restart. **Unverified** on hardware. |
 | "Pairing revoked" in headset | Pair again (Pairing mode on the tablet). |
 | Headset shows as out of contact after it was restarted | With **Start on boot** on (default, per headset under *Headsets*), the player should open itself after a reboot. If it does not — first launch after install, or the toggle was off — open *Library → Unknown sources → VR Experience Player*. It finds the tablet even if either device's IP address changed. |

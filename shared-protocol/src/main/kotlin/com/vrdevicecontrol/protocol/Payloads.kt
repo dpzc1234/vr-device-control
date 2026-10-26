@@ -72,6 +72,18 @@ data class DeviceConfig(
     val startOnBoot: Boolean,
 )
 
+/** Immediate operator request to align app space with the rider's current position and heading. */
+@Serializable
+data object Recenter
+
+@Serializable
+data class RecenterResult(
+    val accepted: Boolean,
+    /** Headset monotonic time at which the scene origin was updated. */
+    val centeredAtUs: Micros? = null,
+    val error: ErrorInfo? = null,
+)
+
 // --- Clock ----------------------------------------------------------------------------------
 
 @Serializable

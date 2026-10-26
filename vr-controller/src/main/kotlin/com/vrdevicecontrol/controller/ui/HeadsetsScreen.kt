@@ -64,7 +64,14 @@ fun HeadsetsScreen(state: UiState, vm: ControllerViewModel) {
     Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp)) {
         ScreenHeader("Headsets", "${state.onlineCount} online · ${state.devices.size} paired") {
             Column(horizontalAlignment = Alignment.End) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedButton(
+                        onClick = vm::recenterAll,
+                        enabled = state.devices.any {
+                            it.online && it.statusIsLive && it.status?.appActive == true &&
+                                it.status.worn != false && !it.busyWithRun
+                        },
+                    ) { Text("Recenter all") }
                     Text("Pairing mode", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = state.pairingMode, onCheckedChange = vm::setPairingMode)
@@ -106,6 +113,7 @@ fun HeadsetsScreen(state: UiState, vm: ControllerViewModel) {
                         onRename = { renaming = d },
                         onForget = { forgetting = d },
                         onStartOnBoot = { vm.setStartOnBoot(d.deviceId, it) },
+                        onRecenter = { vm.recenter(d.deviceId) },
                     )
                 }
             }
@@ -180,6 +188,7 @@ private fun DeviceCard(
     onRename: () -> Unit,
     onForget: () -> Unit,
     onStartOnBoot: (Boolean) -> Unit,
+    onRecenter: () -> Unit,
 ) {
     val status = d.status
     Panel(highlight = if (d.online) null else Tone.WARN) {
@@ -244,7 +253,22 @@ private fun DeviceCard(
             Switch(checked = d.record.startOnBoot, onCheckedChange = onStartOnBoot)
         }
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onForget, colors = ButtonDefaults.textButtonColors(contentColor = toneColor(Tone.BAD))) { Text("Forget headset") }
+        val canRecenter = d.online && d.statusIsLive && status?.appActive == true &&
+            status.worn != false && !d.busyWithRun
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onRecenter, enabled = canRecenter) { Text("Recenter") }
+            TextButton(onClick = onForget, colors = ButtonDefaults.textButtonColors(contentColor = toneColor(Tone.BAD))) { Text("Forget headset") }
+        }
+        if (d.recenterPending) {
+            Text("Recenter requested…", style = MaterialTheme.typography.bodySmall, color = toneColor(Tone.INFO))
+        } else d.recenterResult?.let { result ->
+            Text(
+                if (result.accepted) "Recenter confirmed"
+                else "Recenter failed: ${result.error?.detail ?: "unknown error"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (result.accepted) toneColor(Tone.GOOD) else toneColor(Tone.BAD),
+            )
+        }
     }
 }
 

@@ -72,6 +72,17 @@ class ImmersiveScene(private val activity: AppSystemActivity) {
         )
     }
 
+    /**
+     * Aligns app space with the rider's current physical position and heading. The operator calls
+     * this while the rider is facing the ride direction. `LOCAL_FLOOR` preserves floor height;
+     * setting a zero view origin maps the current tracked pose to app-forward at the app origin.
+     * This changes only this application's scene and does not alter Horizon OS guardian data.
+     */
+    fun recenterToCurrentPose() {
+        activity.scene.setViewOrigin(0f, 0f, 0f, 0f)
+        activity.scene.resetSessionStartPose()
+    }
+
     /** Null when the presentation is not explicitly supported; unusual layouts are never guessed. */
     fun unsupportedReason(presentation: PresentationDescriptor): String? = when {
         presentation.eyeOrder == EyeOrder.RIGHT_FIRST && presentation.stereo != StereoLayout.MONO ->

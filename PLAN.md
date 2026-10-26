@@ -1,6 +1,6 @@
 # VR headset management — technical development plan
 
-Status: development blueprint; application implementation has not started. Requirements below reflect the agreed operator workflow. Library selections, tuning values, and internal API names are proposed implementation decisions until validated by the feasibility milestones.
+Status: implementation in progress. The repository contains the M0–M5 application structure; hardware-dependent behavior remains subject to the qualification gates below. Requirements reflect the agreed operator workflow.
 
 ## Confirmed requirements
 
@@ -14,6 +14,8 @@ Status: development blueprint; application implementation has not started. Requi
 - Allow headsets to be launched in advance and left unattended; users wear them when playback begins.
 - Allow the operator to select participants for each run, defaulting to all online headsets.
 - An operator presses Start on the tablet when participants are ready. Videos already contain the experience countdown; play it intact from the beginning. No physical trigger or equipment integration is required.
+- Start the player after headset reboot and make a short best-effort attempt to restore it to the foreground if a Horizon OS panel covers it. A standard APK cannot close or force-stop other apps; exclusive-app boot requires supported managed-device/kiosk policy.
+- Provide per-headset and all-online recenter controls. The operator faces riders in the intended direction and explicitly recenters between runs; never recenter during playback or on reconnection.
 
 The 200 ms limit applies to initial playback. Ongoing alignment and drift correction are outside the initial scope; natural playback drift is acceptable unless experience testing establishes a further requirement. Start alignment is a hardware acceptance target, not a guarantee established by the design alone.
 
@@ -30,11 +32,12 @@ Use the existing `vr-controller/` and `vr-headset/` directories for application 
 1. Import a video into the tablet library. Record its title, projection, stereo layout, duration, codec, resolution, and checksum. Allow manual correction of projection/stereo metadata.
 2. Distribute it to selected headsets. Show download progress, available storage, missing content, and errors per headset. Retain offline devices in the device list and offer queued transfers on reconnection.
 3. Create a run. Initially select all currently online headsets; the operator can change the selection. Freeze the participant list when preparing the run; later arrivals do not silently join.
-4. Prepare the selected video on all selected devices. Distinguish online from ready: readiness requires verified content, supported decoding, a usable playback surface, suitable clock synchronization, and an active headset application.
-5. Enable Start when every selected participant is ready. If a selected device is unavailable, show the reason and let the operator wait, retry, or remove it explicitly.
-6. The operator presses Start when participants are ready. Schedule playback from media position zero with a short coordination lead time, initially about two seconds and subject to hardware testing. During that delay, retain the headset standby scene and show a brief starting status on the tablet. At the scheduled time, reveal/play the video and its audio, including its existing countdown; do not add a second participant-facing countdown or skip any of the recorded countdown. Show start-command acknowledgements separately from observed playback reports. The staging/start area must provide connectivity for preparation and command delivery.
-7. Each headset executes its accepted start locally and plays the complete video without needing Wi-Fi or the controller. Return to standby locally after completion, even when offline.
-8. Provide pause, resume, restart, and stop-to-standby controls for reachable devices. Show unreachable participants and per-device acknowledgements; never imply that a control reached an offline device. Do not queue playback commands for later delivery when a participant returns.
+4. With riders wearing the headsets and facing forward, recenter each device or all eligible online devices and confirm acknowledgements.
+5. Prepare the selected video on all selected devices. Distinguish online from ready: readiness requires verified content, supported decoding, a usable playback surface, suitable clock synchronization, and an active headset application.
+6. Enable Start when every selected participant is ready. If a selected device is unavailable, show the reason and let the operator wait, retry, or remove it explicitly.
+7. The operator presses Start when participants are ready. Schedule playback from media position zero with a short coordination lead time, initially about two seconds and subject to hardware testing. During that delay, retain the headset standby scene and show a brief starting status on the tablet. At the scheduled time, reveal/play the video and its audio, including its existing countdown; do not add a second participant-facing countdown or skip any of the recorded countdown. Show start-command acknowledgements separately from observed playback reports. The staging/start area must provide connectivity for preparation and command delivery.
+8. Each headset executes its accepted start locally and plays the complete video without needing Wi-Fi or the controller. Return to standby locally after completion, even when offline.
+9. Provide pause, resume, restart, and stop-to-standby controls for reachable devices. Show unreachable participants and per-device acknowledgements; never imply that a control reached an offline device. Do not queue playback commands for later delivery when a participant returns.
 
 Run policy: losing Wi-Fi does not pause any headset, cancel an already accepted scheduled start, alter playback speed, or seek the video. Reconnection only reconciles status; it does not restart or resynchronize playback. A headset that missed the start stays in standby and does not automatically join late. There is no pause-group-on-disconnection option because coverage loss is expected during the experience.
 
@@ -244,6 +247,7 @@ The headset issues `prepareToken` only for its current asset/presentation, proce
 | `CANCEL_START` / `CONTROL_RESULT` | Both | Best-effort cancellation before execution, with explicit result |
 | `PAUSE` / `RESUME` / `STOP` | Tablet → headset | Explicit, expiring control of an existing run on reachable devices |
 | `RESULT_BATCH` / `RESULTS_ACK` | Both | Idempotent result upload after reconnect |
+| `RECENTER` / `RECENTER_RESULT` | Both | Immediate app-space recenter request and explicit acceptance/error; only active, worn devices between runs may accept |
 
 Restart is a new prepare/start generation from position zero, never an implicit reconnect action. Pause/resume during a run are operator controls on reachable devices; cross-device resumption accuracy is outside the initial start-only SLA. Keep these controls separate from the primary run-start workflow.
 

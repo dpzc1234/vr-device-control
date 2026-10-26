@@ -11,6 +11,8 @@ Nothing in this repository has been run on Quest 3 or on the target tablet yet. 
 | Measured start skew < 200 ms (30 four-headset starts) | Pending | Use `test-fixtures/out/sync_360_mono.mp4` (frame counter, flash + beep each second) |
 | Venue LAN reachability / client isolation | Pending | Diagnostics screen + headset connection test |
 | Headset lifecycle (sleep, unmount, tracking dialogs) | Pending | Mapped from `onSessionStateChanged`, `onVRPause/onVRReady`, `onHMDMounted/Unmounted` |
+| Remote app-space recenter | Pending | Uses `LOCAL_FLOOR` plus `Scene.setViewOrigin(0,0,0,0)` while the rider faces forward; verify flat/180°/360° orientation on all headsets |
+| Boot foreground recovery versus Store | Pending | `BOOT_COMPLETED` launch plus task-front retries at 3/8/15 s; normal APK cannot force-stop system apps |
 
 Record here, per test session: tablet model + Android version, Horizon OS version, app versions, network, media tuple (codec/profile/bit depth/resolution/fps/bitrate), and median/p95/max skew with unknown counts.
 
@@ -18,7 +20,7 @@ Record here, per test session: tablet model + Android version, Horizon OS versio
 
 | Suite | Count | Covers |
 | --- | --- | --- |
-| `shared-protocol` | 10 | round trip, string timestamps, unknown fields, version mismatch, unknown/oversize/malformed, fingerprint, credentials |
+| `shared-protocol` | 11 | round trip, string timestamps, unknown fields, version mismatch, unknown/oversize/malformed, fingerprint, credentials, recenter command/result |
 | `shared-domain` | 29 | clock estimator (offsets, asymmetry, outliers, ageing, invalid samples); session reducer (readiness, start validation, frozen deadline, early/late wake, lifecycle, controls, duplicates/supersession); run phases; dedup; transfer planner; backoff |
 | `vr-headset` (JVM) | 7 | range resume after mid-body disconnect, `200` restart, corrupt bytes, low space, pinned removal, launch reconciliation |
 
