@@ -1,6 +1,7 @@
 package com.vrdevicecontrol.controller.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -36,12 +37,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.BatteryFull
+import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
@@ -70,13 +75,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,6 +126,10 @@ import com.vrdevicecontrol.protocol.PlaybackState
 
 @Composable
 fun RunScreen(state: UiState, vm: ControllerViewModel, onOpenLibrary: () -> Unit) {
+    if (!state.developer) {
+        OperatorRunScreen(state, vm)
+        return
+    }
     var picker by remember { mutableStateOf(false) }
     val runUi = state.run
 
@@ -126,9 +138,7 @@ fun RunScreen(state: UiState, vm: ControllerViewModel, onOpenLibrary: () -> Unit
 
         if (runUi == null) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                if (state.library.isEmpty() && !state.developer) {
-                    EmptyState(Icons.Rounded.VideoLibrary, "No videos installed", "Contact your content provider to have experience videos added to this tablet.")
-                } else if (state.library.isEmpty()) {
+                if (state.library.isEmpty()) {
                     EmptyState(Icons.Rounded.VideoLibrary, "No videos yet", "Import the experience video into the library, send it to the headsets, then come back here.") {
                         Button(onClick = onOpenLibrary) { Text("Open library") }
                     }
@@ -160,7 +170,7 @@ fun RunScreen(state: UiState, vm: ControllerViewModel, onOpenLibrary: () -> Unit
 // --- Header -------------------------------------------------------------------------------------
 
 @Composable
-private fun RunHeader(state: UiState, runUi: RunUi?, onNewRun: () -> Unit) {
+private fun RunHeader(state: UiState, runUi: RunUi?, onNewRun: () -> Unit, operatorMode: Boolean = false) {
     Row(Modifier.fillMaxWidth().padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Session", style = MaterialTheme.typography.headlineMedium)
@@ -170,7 +180,7 @@ private fun RunHeader(state: UiState, runUi: RunUi?, onNewRun: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (runUi != null) {
+        if (runUi != null && !(operatorMode && runUi.phase == RunPhase.DRAFT)) {
             val (label, tone) = phaseLabel(runUi.phase)
             StatusPill(label, tone)
             if (runUi.run.startAtControllerUs != null || runUi.phase == RunPhase.FINISHED) {
@@ -766,4 +776,206 @@ private fun VideoPicker(state: UiState, vm: ControllerViewModel, onDismiss: () -
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
+}
+
+// --- Operator (customer) run -------------------------------------------------------------------
+
+@Composable
+private fun OperatorRunScreen(state: UiState, vm: ControllerViewModel) {
+    val runUi = state.run
+    Column(Modifier.fillMaxSize().padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 20.dp)) {
+        RunHeader(state, runUi, onNewRun = vm::newRun, operatorMode = true)
+        if (state.library.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                EmptyState(Icons.Rounded.VideoLibrary, "No videos installed", "Contact your content provider to have experience videos added to this tablet.")
+            }
+        } else {
+            if (runUi?.fromPreviousEpoch == true) PreviousEpochBanner(onClose = vm::newRun)
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                ScenarioColumn(state, runUi, vm, Modifier.width(320.dp).fillMaxHeight())
+                OperatorHeadsetColumn(state, runUi, vm, Modifier.weight(1f).fillMaxHeight())
+            }
+            if (runUi != null) {
+                Spacer(Modifier.height(16.dp))
+                ActionBar(state, runUi, vm)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScenarioColumn(state: UiState, runUi: RunUi?, vm: ControllerViewModel, modifier: Modifier) {
+    val frozen = runUi?.run?.frozen == true
+    val selectedId = runUi?.run?.asset?.assetId
+    Column(modifier) {
+        Text("Select Scenario:", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 8.dp),
+        ) {
+            items(state.library, key = { it.asset.assetId }) { entry ->
+                val selected = entry.asset.assetId == selectedId
+                Surface(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(
+                            if (selected) 2.dp else 1.dp,
+                            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                            MaterialTheme.shapes.large,
+                        )
+                        .clip(MaterialTheme.shapes.large)
+                        .then(if (frozen) Modifier else Modifier.clickable { vm.selectVideo(entry.asset.assetId) }),
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        VideoThumbnail(
+                            vm.thumbnail(entry.asset.assetId),
+                            entry.asset.assetId,
+                            Modifier.width(120.dp).aspectRatio(16f / 9f),
+                        )
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(entry.asset.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.height(8.dp))
+                            Chip(projectionLabel(entry.presentation.projection))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperatorHeadsetColumn(state: UiState, runUi: RunUi?, vm: ControllerViewModel, modifier: Modifier) {
+    val frozen = runUi?.run?.frozen == true
+    val shown = when {
+        runUi == null || !frozen -> state.devices.map { it.deviceId }
+        else -> runUi.run.participants.map { it.deviceId }
+    }
+    Column(modifier) {
+        Text(
+            if (frozen) "Headsets in this run" else "Headsets",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+        if (shown.isEmpty()) {
+            EmptyState(Icons.Rounded.ViewInAr, "No headsets paired", "Pair the Quest headsets with this tablet before starting a session.")
+            return
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(280.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(bottom = 8.dp),
+        ) {
+            items(shown, key = { it }) { id ->
+                OperatorHeadsetTile(state.device(id), runUi?.run?.participant(id), runUi, vm, id)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperatorHeadsetTile(view: DeviceView?, p: Participant?, runUi: RunUi?, vm: ControllerViewModel, deviceId: String) {
+    val run = runUi?.run
+    val selectable = run != null && !run.frozen
+    val selected = p != null
+    val online = view?.online == true
+    val status = if (runUi != null) tileStatus(view, p, runUi) else null
+    var expanded by rememberSaveable(deviceId) { mutableStateOf(false) }
+    val storedVolume = view?.record?.volume ?: 1f
+    var volume by remember(deviceId, storedVolume) { mutableFloatStateOf(storedVolume) }
+    val accent = status?.let { toneColor(it.tone) } ?: MaterialTheme.colorScheme.onSurface
+
+    Surface(
+        Modifier
+            .fillMaxWidth()
+            .border(
+                1.5.dp,
+                if (selectable && selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant,
+                MaterialTheme.shapes.large,
+            )
+            .clip(MaterialTheme.shapes.large),
+        color = if (!online) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(Modifier.padding(16.dp).alpha(if (selectable && !selected) 0.6f else 1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectable) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = { vm.toggleParticipant(deviceId) },
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .then(if (selectable) Modifier.clickable { vm.toggleParticipant(deviceId) } else Modifier),
+                ) {
+                    Text(view?.label ?: "Unknown headset", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        StatusDot(if (online) Tone.GOOD else Tone.WARN, 7.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (online) "Online" else "Out of contact",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                view?.status?.let { live ->
+                    live.batteryPercent?.let { pct ->
+                        val tone = if (pct < 20) Tone.BAD else if (pct < 40) Tone.WARN else Tone.NEUTRAL
+                        FooterItem(if (live.charging == true) Icons.Rounded.BatteryChargingFull else Icons.Rounded.BatteryFull, "$pct%", tone)
+                    }
+                }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (expanded) "Hide controls" else "Show controls")
+                }
+            }
+            if (runUi != null && runUi.run.frozen && status != null) {
+                Spacer(Modifier.height(10.dp))
+                Text(status.label, style = MaterialTheme.typography.titleMedium, color = accent)
+                status.detail?.takeUnless { it == "Video on headset" }?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                ProgressRow(view, p, runUi)
+            }
+            AnimatedVisibility(expanded) {
+                Column(Modifier.padding(top = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.AutoMirrored.Rounded.VolumeUp, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Volume", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(64.dp))
+                        Slider(
+                            value = volume,
+                            onValueChange = { volume = it },
+                            onValueChangeFinished = { vm.setVolume(deviceId, volume) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text("${(volume * 100).toInt()}%", style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(44.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { vm.recenter(deviceId) },
+                        enabled = online,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
+                    ) {
+                        Icon(Icons.Rounded.CenterFocusStrong, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Recenter")
+                    }
+                }
+            }
+        }
+    }
 }

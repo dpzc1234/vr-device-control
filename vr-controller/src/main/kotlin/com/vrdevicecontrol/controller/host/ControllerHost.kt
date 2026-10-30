@@ -367,7 +367,12 @@ class ControllerHost(
                 // default differs (e.g. freshly installed, or toggled while offline).
                 link.send(
                     MessageType.DEVICE_CONFIG,
-                    codec.toPayload(DeviceConfig(startOnBoot = connected?.record?.startOnBoot ?: true)),
+                    codec.toPayload(
+                        DeviceConfig(
+                            startOnBoot = connected?.record?.startOnBoot ?: true,
+                            volume = connected?.record?.volume,
+                        ),
+                    ),
                 )
 
                 var lastInboundUs = clock.nowUs()

@@ -2,12 +2,14 @@ package com.vrdevicecontrol.controller.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -30,6 +32,7 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -60,18 +63,22 @@ enum class Tab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun ControllerApp(vm: ControllerViewModel) {
+fun ControllerApp(vm: ControllerViewModel, dark: Boolean, onDarkChange: (Boolean) -> Unit) {
     val state by vm.ui.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.RUN) }
     val snackbar = remember { SnackbarHostState() }
     var accessDialog by remember { mutableStateOf<AccessDialog?>(null) }
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
+    LaunchedEffect(state.developer) {
+        if (!state.developer && tab != Tab.RUN) tab = Tab.RUN
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize()) {
         DeveloperBar(
             state.access,
             onSetPin = { accessDialog = AccessDialog.SetPin(changing = false) },
@@ -79,7 +86,7 @@ fun ControllerApp(vm: ControllerViewModel) {
             onLock = vm::lockDeveloperMode,
         )
         Row(Modifier.fillMaxSize()) {
-            Rail(state, tab, onSelect = { tab = it })
+            Rail(state, tab, dark = dark, onDarkChange = onDarkChange, onSelect = { tab = it })
             VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 Crossfade(tab, label = "tab") { current ->
@@ -94,15 +101,31 @@ fun ControllerApp(vm: ControllerViewModel) {
             }
         }
         }
+        if (!state.developer) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .size(72.dp)
+                    .then(hiddenUnlockModifier { accessDialog = AccessDialog.Unlock }),
+            )
+        }
+        }
     }
     AccessDialogs(accessDialog, vm) { accessDialog = it }
 }
 
 @Composable
-private fun Rail(state: UiState, selected: Tab, onSelect: (Tab) -> Unit) {
+private fun Rail(
+    state: UiState,
+    selected: Tab,
+    dark: Boolean,
+    onDarkChange: (Boolean) -> Unit,
+    onSelect: (Tab) -> Unit,
+) {
     val pendingPairings = state.pairing.count { it.status == PairingStatus.PENDING }
     val activeTransfers = state.transfers.count { it.state in setOf(TransferState.QUEUED, TransferState.DOWNLOADING, TransferState.VERIFYING, TransferState.PAUSED) }
     val failedTransfers = state.transfers.count { it.state == TransferState.FAILED }
+    val tabs = if (state.developer) Tab.entries else listOf(Tab.RUN)
 
     NavigationRail(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -116,7 +139,7 @@ private fun Rail(state: UiState, selected: Tab, onSelect: (Tab) -> Unit) {
             }
         },
     ) {
-        Tab.entries.forEach { t ->
+        tabs.forEach { t ->
             val badge: String? = when (t) {
                 Tab.HEADSETS -> pendingPairings.takeIf { it > 0 }?.toString()
                 Tab.TRANSFERS -> (if (failedTransfers > 0) "!" else activeTransfers.takeIf { it > 0 }?.toString())
@@ -135,16 +158,49 @@ private fun Rail(state: UiState, selected: Tab, onSelect: (Tab) -> Unit) {
             )
         }
         Spacer(Modifier.weight(1f))
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 16.dp, start = 8.dp, end = 8.dp)) {
-            val (tone, text) = when {
-                state.host.error != null -> Tone.BAD to "Server error"
-                !state.host.running -> Tone.WARN to "Starting"
-                !state.host.advertised -> Tone.WARN to "Not discoverable"
-                else -> Tone.GOOD to "${state.onlineCount}/${state.devices.size} online"
+        if (state.developer) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 12.dp, start = 8.dp, end = 8.dp)) {
+                val (tone, text) = when {
+                    state.host.error != null -> Tone.BAD to "Server error"
+                    !state.host.running -> Tone.WARN to "Starting"
+                    !state.host.advertised -> Tone.WARN to "Not discoverable"
+                    else -> Tone.GOOD to "${state.onlineCount}/${state.devices.size} online"
+                }
+                StatusDot(tone, 10.dp)
+                Spacer(Modifier.height(6.dp))
+                Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             }
-            StatusDot(tone, 10.dp)
-            Spacer(Modifier.height(6.dp))
-            Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        }
+        ThemeModeSelector(dark, onDarkChange)
+    }
+}
+
+@Composable
+private fun ThemeModeSelector(dark: Boolean, onDarkChange: (Boolean) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Switch(checked = dark, onCheckedChange = onDarkChange)
+        Text(
+            if (dark) "Dark" else "Light",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Seven taps within 4 s, with no ripple, so customer mode gives no hint that developer mode exists. */
+@Composable
+private fun hiddenUnlockModifier(onUnlock: () -> Unit): Modifier {
+    val taps = remember { mutableListOf<Long>() }
+    return Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+        val now = System.currentTimeMillis()
+        taps.removeAll { now - it > 4_000 }
+        taps += now
+        if (taps.size >= 7) {
+            taps.clear()
+            onUnlock()
         }
     }
 }

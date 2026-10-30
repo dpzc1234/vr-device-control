@@ -6,6 +6,10 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import com.vrdevicecontrol.controller.ui.ControllerApp
 import com.vrdevicecontrol.controller.ui.ControllerViewModel
 import com.vrdevicecontrol.controller.ui.theme.ControllerTheme
@@ -20,7 +24,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContent { ControllerTheme { ControllerApp(vm) } }
+        setContent {
+            var dark by rememberSaveable { mutableStateOf(true) }
+            ControllerTheme(dark = dark) {
+                ControllerApp(vm, dark = dark, onDarkChange = { dark = it })
+            }
+        }
     }
 
     /** Any touch counts as activity for developer-mode auto-lock. */

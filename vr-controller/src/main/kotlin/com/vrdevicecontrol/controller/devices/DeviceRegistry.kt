@@ -68,6 +68,8 @@ data class DeviceRecord(
     val lastAddress: String? = null,
     /** Operator preference: launch the headset app after reboot. Pushed on connect and when toggled. */
     val startOnBoot: Boolean = true,
+    /** Operator preference: linear playback gain, 0 to 1. Pushed on connect and when changed. */
+    val volume: Float = 1f,
 )
 
 @Serializable
@@ -262,6 +264,15 @@ class DeviceRegistry(
         if (current.startOnBoot == enabled) return
         updateRecord(deviceId) { it.copy(startOnBoot = enabled) }
         log.log(if (enabled) "START_ON_BOOT_ON" else "START_ON_BOOT_OFF", deviceId)
+    }
+
+    /** Stores playback volume. Callers send [com.vrdevicecontrol.protocol.MessageType.DEVICE_CONFIG] when the headset is online. */
+    fun setVolume(deviceId: String, volume: Float) {
+        val current = _records.value.firstOrNull { it.deviceId == deviceId } ?: return
+        val clamped = volume.coerceIn(0f, 1f)
+        if (kotlin.math.abs(current.volume - clamped) < 0.005f) return
+        updateRecord(deviceId) { it.copy(volume = clamped) }
+        log.log("VOLUME_SET", deviceId, detail = "${(clamped * 100).toInt()}%")
     }
 
     /** Deletes the pairing. The headset must pair again before it can connect. */

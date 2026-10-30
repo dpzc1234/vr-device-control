@@ -70,6 +70,8 @@ data class HeadsetStatus(
 @Serializable
 data class DeviceConfig(
     val startOnBoot: Boolean,
+    /** Linear gain from 0 to 1. Null leaves the headset's current volume unchanged. */
+    val volume: Float? = null,
 )
 
 /** Immediate operator request to align app space with the rider's current position and heading. */

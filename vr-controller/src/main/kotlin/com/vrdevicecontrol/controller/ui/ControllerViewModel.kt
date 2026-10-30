@@ -269,6 +269,16 @@ class ControllerViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun setVolume(deviceId: String, volume: Float) = act {
+        registry.setVolume(deviceId, volume)
+        val record = registry.view(deviceId)?.record ?: return@act
+        val sent = registry.link(deviceId)?.send(
+            MessageType.DEVICE_CONFIG,
+            codec.toPayload(DeviceConfig(startOnBoot = record.startOnBoot, volume = record.volume)),
+        ) != null
+        if (!sent) _messages.trySend("Headset is out of contact — volume applies when it reconnects")
+    }
+
     fun recenter(deviceId: String) = graph.act {
         val link = registry.link(deviceId)
         val sent = link?.send(MessageType.RECENTER, codec.toPayload(Recenter)) != null

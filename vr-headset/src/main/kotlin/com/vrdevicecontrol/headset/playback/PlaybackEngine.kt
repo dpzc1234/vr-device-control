@@ -38,4 +38,7 @@ interface PlaybackEngine {
 
     fun positionUs(): Long
     fun durationUs(): Long
+
+    /** Linear gain from 0 to 1. Applies to the current player and the next one created. */
+    fun setVolume(volume: Float)
 }

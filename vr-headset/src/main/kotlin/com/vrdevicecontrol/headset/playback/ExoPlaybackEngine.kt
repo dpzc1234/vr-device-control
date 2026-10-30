@@ -43,6 +43,7 @@ class ExoPlaybackEngine(
     private var stateReady = false
     private var firstFrame = false
     private var timeout: Runnable? = null
+    private var volume = 1f
 
     override fun prepare(token: String, file: File, asset: AssetDescriptor, presentation: PresentationDescriptor) {
         release()
@@ -53,6 +54,7 @@ class ExoPlaybackEngine(
             .apply {
                 playWhenReady = false
                 repeatMode = Player.REPEAT_MODE_OFF
+                this.volume = this@ExoPlaybackEngine.volume
                 setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
             }
         player = exo
@@ -157,6 +159,11 @@ class ExoPlaybackEngine(
 
     override fun positionUs(): Long = (player?.currentPosition ?: 0) * 1_000
     override fun durationUs(): Long = (player?.duration?.takeIf { it > 0 } ?: 0) * 1_000
+
+    override fun setVolume(volume: Float) {
+        this.volume = volume.coerceIn(0f, 1f)
+        player?.volume = this.volume
+    }
 
     private companion object {
         const val TAG = "ExoPlaybackEngine"

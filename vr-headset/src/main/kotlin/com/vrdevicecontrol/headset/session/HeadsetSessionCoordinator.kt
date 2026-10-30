@@ -94,6 +94,7 @@ class HeadsetSessionCoordinator(
     val state: StateFlow<HeadsetSessionState> = _state.asStateFlow()
 
     private var engine: PlaybackEngine? = null
+    private var pendingVolume: Float? = null
     private var scene: ImmersiveScene? = null
     private var pinnedSha: String? = null
 
@@ -146,6 +147,7 @@ class HeadsetSessionCoordinator(
         this.engine = engine
         this.scene = scene
         engine.listener = { event -> mainHandler.post { onPlaybackEvent(event) } }
+        pendingVolume?.let(engine::setVolume)
         updateActive()
     }
 
@@ -191,6 +193,12 @@ class HeadsetSessionCoordinator(
                     val config = codec.payloadOf<DeviceConfig>(env)
                     StartOnBoot.setEnabled(context, config.startOnBoot)
                     Log.i(TAG, "Start on boot ${if (config.startOnBoot) "enabled" else "disabled"}")
+                    config.volume?.let { level ->
+                        val clamped = level.coerceIn(0f, 1f)
+                        pendingVolume = clamped
+                        mainHandler.post { engine?.setVolume(clamped) }
+                        Log.i(TAG, "Volume set to ${(clamped * 100).toInt()}%")
+                    }
                     sendStatus()
                 }
                 MessageType.RECENTER -> handleRecenter(env)

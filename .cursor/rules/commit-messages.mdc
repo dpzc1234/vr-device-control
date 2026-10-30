@@ -1,0 +1,23 @@
+---
+description: Commit messages must not credit Cursor or the agent
+alwaysApply: true
+---
+
+# Commit messages
+
+Commit messages describe the change only.
+
+- Do not add Cursor, the agent, or any AI tool as an author, co-author, trailer, or footer.
+- Do not add `Co-authored-by` lines for Cursor or `cursoragent@cursor.com`.
+- If a commit is created with that credit, remove it before pushing.
+
+```text
+Simplify the operator run screen.
+
+```
+
+```text
+Simplify the operator run screen.
+
+Co-authored-by: Cursor <cursoragent@cursor.com>
+```
